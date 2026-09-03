@@ -31,7 +31,7 @@ export {
   defaultResourceLimits,
   TOOL_INPUT_JSON_SCHEMA_DIALECT,
 } from "./config.js";
-export type { McpbRelayConfig, ResourceLimits, RuntimeConfig } from "./config.js";
+export type { ExtensionAdapterConfig, McpbRelayConfig, ResourceLimits, RuntimeConfig } from "./config.js";
 export {
   adapterTypeSchema,
   browserSourceSchema,

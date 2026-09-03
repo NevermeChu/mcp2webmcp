@@ -9,7 +9,10 @@
 | 对外标题 | **WebMCP Gateway** |
 | 仓库 / 包 / CLI / 配置 | **mcp2webmcp**（`@mcp2webmcp/*`、命令 `mcp2webmcp`） |
 
-**v0.1** 仅 **cooperative embed**：页面必须加载 MCP-B 本机 relay embed。Chrome Extension / 零接入尚未实现。
+**v0.1** 两条浏览器接入：
+
+- **cooperative embed**（`adapter: mcpb`，默认 demo）：页面加载 MCP-B relay embed。
+- **ExtensionAdapter**（`adapter: extension`）：未打包 Chrome/Edge MV3 扩展发现页面 `registerTool`，经 loopback JSON 进 Gateway。页面**不必**加载 embed。扩展**不是** MCP server。
 
 设计规格：[docs/architecture.md](docs/architecture.md)。
 
@@ -33,6 +36,8 @@ pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
 浏览器打开 [http://127.0.0.1:18080](http://127.0.0.1:18080)，状态为 `ready`。
 
 **接到 Cursor / Claude：** 复制 `configs/mcp-client.example.json`，把 `REPO_ROOT` 换成本仓库绝对路径，写入 MCP 配置。步骤见 [docs/connect-mcp-client.md](docs/connect-mcp-client.md)。
+
+**Extension 路径（无 embed）：** 加载 `apps/extension`，Gateway `--config configs/extension-demo.yaml`（`127.0.0.1:9334`），夹具 `http://127.0.0.1:18081`。协议见 [docs/extension-loopback-protocol.md](docs/extension-loopback-protocol.md)。
 
 Gateway 进程开发时用 `node apps/gateway/dist/main.js`；安装后的 CLI 是 **`mcp2webmcp`**。
 
@@ -58,12 +63,13 @@ Gateway 进程开发时用 `node apps/gateway/dist/main.js`；安装后的 CLI �
 
 ```text
 apps/gateway                 YAML + stdio Gateway（CLI: mcp2webmcp）
+apps/extension               Chrome/Edge MV3（发现 + 搬运，不是 MCP server）
 packages/protocol            类型与 Zod schema
 packages/core                注册表、命名空间、路由、策略、审计
-packages/browser-adapter     FakeBrowserAdapter + McpBAdapter（只包 MCP-B 公开 API）
+packages/browser-adapter     FakeBrowserAdapter + McpBAdapter + ExtensionAdapter
 packages/mcp-transport       stdio MCP、ToolProjector、管理工具
-packages/test-fixtures/...   cooperative embed 演示页
-configs/                     demo / example YAML 与 MCP 客户端模板
+packages/test-fixtures/...   cooperative embed 与无 embed 扩展夹具
+configs/                     demo / extension-demo YAML 与 MCP 客户端模板
 docs/                        规格、接线、ADR、spike 记录
 spikes/0001-mcpb-integration Phase -1 一次性验证（不是产品 Core）
 tests/                       集成测试；真实浏览器 E2E 在 tests/e2e/
@@ -72,8 +78,9 @@ tests/                       集成测试；真实浏览器 E2E 在 tests/e2e/
 ## 开发
 
 ```powershell
-pnpm test          # 单测 + 集成（不含浏览器）
-pnpm test:e2e      # 真实浏览器 cooperative embed；Windows 优先 Edge
+pnpm test                 # 单测 + 集成（不含浏览器）
+pnpm test:e2e             # 真实浏览器 cooperative embed；Windows 优先 Edge
+pnpm test:e2e:extension   # 未打包扩展 + 无 embed 夹具（headed；Playwright 只当测试工具）
 pnpm lint
 ```
 
@@ -97,9 +104,11 @@ node apps/gateway/dist/main.js
 
 | 文件 | 用途 |
 | --- | --- |
-| `configs/demo.yaml` | loopback demo（配合 fixture `:18080`） |
+| `configs/demo.yaml` | cooperative embed demo（fixture `:18080`，relay `:9333`） |
+| `configs/extension-demo.yaml` | 扩展 demo（fixture `:18081`，loopback `:9334`） |
 | `configs/example.yaml` | KnowMesh 风格骨架，需改成真实 origin / 工具 |
-| `configs/mcp-client.example.json` | Cursor / Claude `mcpServers` 模板 |
+| `configs/mcp-client.example.json` | Cursor / Claude `mcpServers` 模板（embed） |
+| `configs/mcp-client.extension.example.json` | 同上，ExtensionAdapter |
 
 环境变量仍用品牌前缀：`MCP2WEBMCP_CONFIG`、`MCP2WEBMCP_ALLOWED_ORIGINS`、`MCP2WEBMCP_LOG_LEVEL`（只打 stderr）。
 
@@ -109,13 +118,13 @@ node apps/gateway/dist/main.js
 | --- | --- |
 | -1 External spike | Done — `docs/spikes/0001-mcpb-integration.md` |
 | 0–8 Gateway + cooperative E2E | Done |
-| ExtensionAdapter | 未开始 |
+| ExtensionAdapter | Done — MV3 + loopback JSON；多 Gateway 共享浏览器连接仍是第二步 |
 
-## 明确不做（v0.1）
+## 明确不做（本轮）
 
-- Chrome Extension / 零接入发现
 - HTTP MCP
-- 确认 UI（`confirm` 在无通道时 fail-closed）
+- 确认 UI（`confirm` 在无通道时 fail-closed）；Playwright/CDP 不作为产品 adapter
+- 扩展里做 namespace / audit / allowlist
 - 把 `allowedOrigins` 设为 `*`
 
 ## License

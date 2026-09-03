@@ -1,4 +1,4 @@
-import { discoveredTool, FakeBrowserAdapter, McpBAdapter } from "@mcp2webmcp/browser-adapter";
+import { discoveredTool, ExtensionAdapter, FakeBrowserAdapter, McpBAdapter } from "@mcp2webmcp/browser-adapter";
 import { createRuntime } from "@mcp2webmcp/core";
 import { McpStdioServer } from "@mcp2webmcp/mcp-transport";
 import type { BrowserSource, RuntimeConfig } from "@mcp2webmcp/protocol";
@@ -27,6 +27,19 @@ export async function bootstrap(config: RuntimeConfig): Promise<McpStdioServer> 
         maxPayloadBytes: mcpb.maxPayloadBytes,
       }),
     );
+  } else if (config.browser.adapter === "extension") {
+    const extension = config.browser.extension ?? {};
+    await runtime.attach(
+      new ExtensionAdapter({
+        adapterId: "ext-1",
+        allowedOrigins: config.browser.allowedOrigins,
+        host: extension.host,
+        port: extension.port,
+        invokeTimeoutMs: extension.invokeTimeoutMs ?? config.runtime.invocationDeadlineMs,
+      }),
+    );
+  } else {
+    throw new Error(`unsupported browser adapter: ${config.browser.adapter}`);
   }
   return new McpStdioServer(runtime, config);
 }

@@ -14,9 +14,10 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["packages/*/src/**/*.test.ts", "tests/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "tests/e2e/**", "tests/e2e-extension/**"],
+    include: ["tests/e2e-extension/**/*.e2e.test.ts"],
     environment: "node",
-    testTimeout: 15_000,
+    testTimeout: 90_000,
+    hookTimeout: 90_000,
+    fileParallelism: false,
   },
 });

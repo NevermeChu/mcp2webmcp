@@ -29,10 +29,21 @@ export interface RuntimeConfig {
     adapter: string;
     allowedOrigins: string[];
     mcpb?: McpbRelayConfig;
+    extension?: ExtensionAdapterConfig;
   };
   policy: PolicyConfig;
   audit: AuditConfig;
   limits: ResourceLimits;
+}
+
+/**
+ * Loopback bind settings for ExtensionAdapter.
+ * Types stay generic so Core never imports chrome.* or WebSocket server types.
+ */
+export interface ExtensionAdapterConfig {
+  host?: string;
+  port?: number;
+  invokeTimeoutMs?: number;
 }
 
 /** Relay bind settings for the MCP-B adapter. Types stay generic so Core never imports MCP-B. */

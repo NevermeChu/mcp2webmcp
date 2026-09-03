@@ -4,7 +4,14 @@
 
 意图：让暂未支持 WebMCP 的 MCP 客户端调用页面工具。调用路径：WebMCP → Gateway → MCP。
 
-当前接入前提是 **cooperative embed**：页面除了 `document.modelContext.registerTool` 之外，还要加载 MCP-B 本机 relay 的 embed。这不是 Chrome Extension 零接入。ExtensionAdapter 尚未实现。
+两条接入：
+
+1. **cooperative embed**（`configs/demo.yaml`）：页面除了 `registerTool` 还要加载 MCP-B embed。
+2. **ExtensionAdapter**（`configs/extension-demo.yaml`）：加载 `apps/extension`，页面只需 WebMCP `registerTool`，不要让扩展自己当 MCP server。
+
+默认 Gateway 仍可以是 `adapter: mcpb`。扩展 loopback 默认 `127.0.0.1:9334`，不要占用 MCP-B 的 `9333`。
+
+两条可以写在同一份 `.cursor/mcp.json` 里：**不要**用 extension yaml 覆盖旧的 `mcp2webmcp-demo` 条目。`mcp2webmcp-demo` 必须指向 `configs/demo.yaml`（9333）；`mcp2webmcp-extension-demo` 指向 `configs/extension-demo.yaml`（9334）。两条都指向 extension yaml 会 `EADDRINUSE`。ExtensionAdapter 没有 MCP-B 那种「发现已有 relay 再切 client」的行为。
 
 ## 10 分钟 Demo（Windows PowerShell）
 
@@ -46,6 +53,25 @@ pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
 
 第二个 Cursor 窗口再开一个 Gateway 即可：沿用同一份 `configs/demo.yaml`，第二个进程会按 MCP-B client-mode 挂到已有 relay，不必再绑一个浏览器集群。
 
+## ExtensionAdapter（无 embed）
+
+1. `pnpm build`。
+2. 加载未打包扩展：`chrome://extensions` / `edge://extensions` → `apps/extension`。
+3. 夹具：
+
+```powershell
+$env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18081"
+pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
+```
+
+打开 `http://127.0.0.1:18081`。
+4. 在项目 `.cursor/mcp.json` 里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），不要改掉已有 `mcp2webmcp-demo` 的 `demo.yaml`。
+5. Cursor 服务名 `mcp2webmcp-extension-demo`。`webmcp_list_tools` 应看到 `originalName: echo`；调用参数 `{ "message": "hello" }` 返回 `echo:hello`。
+
+v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条浏览器连接留到下一步。
+
+协议细节：[extension-loopback-protocol.md](extension-loopback-protocol.md)。
+
 ## Claude Desktop
 
 配置文件同样是 JSON 的 `mcpServers` 映射，字段与 `configs/mcp-client.example.json` 相同：`command` + `args`。把 `REPO_ROOT` 换成绝对路径后重启 Claude Desktop。
@@ -68,7 +94,7 @@ pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
 - **工具在但调用失败 `POLICY_DENIED`**：default deny；allow 规则必须是精确 origin + 精确页面工具名（`echo` 而不是 MCP 上的 namespace 名）。
 - **`allowedOrigins: "*"`**：生产与 mcpb adapter 均拒绝。
 - **relay 端口被占用**：同时改 `configs/demo.yaml` 的 `browser.mcpb.port` 和 fixture 的 `MCP2WEBMCP_E2E_RELAY_PORT`。
-- **KnowMesh 等业务站**：站点自己 `registerTool` 之后，v0.1 仍要在该页加载 embed，并把 yaml 的 origin/tool allowlist 改成真实 origin。示例骨架见 `configs/example.yaml`。没有 Extension 之前，不能指望「只注册工具、不加载 embed」。
+- **KnowMesh 等业务站**：用扩展路径时站点只 `registerTool`，把 yaml 的 origin/tool allowlist 改成真实 origin。没有 WebMCP runtime 时扩展会失败，不会偷偷当 polyfill。cooperative embed 路径仍见 `configs/example.yaml`。
 
 ## 相关文件
 

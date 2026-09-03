@@ -115,4 +115,15 @@ describe("protocol schemas", () => {
       }),
     ).toThrow(/\*/);
   });
+
+  it("rejects extension config that uses a wildcard origin", () => {
+    expect(() =>
+      runtimeConfigSchema.parse({
+        runtime: {},
+        browser: { adapter: "extension", allowedOrigins: ["*"] },
+        policy: { default: "deny", rules: [] },
+        audit: { path: "/tmp/audit.jsonl" },
+      }),
+    ).toThrow(/\*/);
+  });
 });

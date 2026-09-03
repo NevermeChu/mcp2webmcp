@@ -151,6 +151,13 @@ export const runtimeConfigSchema = z.object({
         maxPayloadBytes: z.number().int().positive().optional(),
       })
       .optional(),
+    extension: z
+      .object({
+        host: z.string().optional(),
+        port: z.number().int().positive().optional(),
+        invokeTimeoutMs: z.number().int().positive().optional(),
+      })
+      .optional(),
   }),
   policy: policyConfigSchema,
   audit: z.object({
@@ -160,18 +167,18 @@ export const runtimeConfigSchema = z.object({
   }),
   limits: resourceLimitsSchema.default(defaultResourceLimits),
 }).superRefine((config, ctx) => {
-  if (config.browser.adapter !== "mcpb") return;
+  if (config.browser.adapter !== "mcpb" && config.browser.adapter !== "extension") return;
   if (config.browser.allowedOrigins.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "mcpb adapter requires an explicit allowedOrigins list",
+      message: `${config.browser.adapter} adapter requires an explicit allowedOrigins list`,
       path: ["browser", "allowedOrigins"],
     });
   }
   if (config.browser.allowedOrigins.includes("*")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "allowedOrigins must not include * for production mcpb",
+      message: `allowedOrigins must not include * for production ${config.browser.adapter}`,
       path: ["browser", "allowedOrigins"],
     });
   }

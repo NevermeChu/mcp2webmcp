@@ -451,7 +451,7 @@ Phase -1 真实链路 Gate 通过后的实现优先级：
 
 1. `FakeBrowserAdapter`
 2. `McpBAdapter`（v0.1 cooperative page mode）
-3. `ExtensionAdapter`（长期 zero-integration 产品路径）
+3. `ExtensionAdapter`（MV3 发现 + loopback JSON；页面不必加载 embed。扩展不是 MCP server）
 4. `PlaywrightAdapter`
 5. CDPAdapter
 6. RemoteBrowserAdapter
@@ -1279,7 +1279,7 @@ v0.1 采用 cooperative page mode：测试页或明确选择接入的应用额�
 <script src=".../@mcp-b/webmcp-local-relay/.../embed.js"></script>
 ```
 
-这意味着 v0.1 的真实 E2E 证明的是“协作式页面接入”。长期正式产品路径是 ExtensionAdapter 在浏览器侧发现工具并建立 transport，使业务网站只保留标准 WebMCP 注册，不加载 MCP-B / Gateway bridge。
+cooperative embed E2E（`adapter: mcpb`）只证明协作式页面接入，不要把它宣称为 extension zero-integration。v0.1 另有 ExtensionAdapter（`adapter: extension`）：MV3 扩展发现页面 `registerTool` 并经 loopback JSON 进 Gateway，业务站不必加载 embed。扩展不是 MCP server；策略与审计仍在 Core。
 
 然后：
 
@@ -2033,7 +2033,7 @@ v0.1 每个 MCP Client 持有一个 stdio Gateway；多个 Gateway 只共享 bro
 
 **Decision**
 
-v0.1 使用 cooperative page embed 打通真实链路；长期通过 ExtensionAdapter 达到网站只实现标准 WebMCP 的目标。
+v0.1 用 cooperative page embed 打通 MCP-B 真实链路；ExtensionAdapter 是并行的无-embed 路径（页面只 `registerTool`）。不要把 embed E2E 当成 extension 验收。
 
 ### ADR-0007
 

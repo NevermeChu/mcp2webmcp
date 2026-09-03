@@ -2,7 +2,7 @@
   "name": "@mcp2webmcp/browser-adapter",
   "version": "0.1.0",
   "private": true,
-  "description": "Browser adapters for WebMCP Gateway (FakeBrowserAdapter, McpBAdapter)",
+  "description": "Browser adapters for WebMCP Gateway (FakeBrowserAdapter, McpBAdapter, ExtensionAdapter)",
   "type": "module",
   "exports": {
     ".": {
@@ -17,9 +17,11 @@
   },
   "dependencies": {
     "@mcp-b/webmcp-local-relay": "5.1.0",
-    "@mcp2webmcp/protocol": "workspace:*"
+    "@mcp2webmcp/protocol": "workspace:*",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

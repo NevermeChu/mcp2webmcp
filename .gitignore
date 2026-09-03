@@ -13,6 +13,7 @@ Thumbs.db
 .env.*
 !.env.example
 .cursor/mcp.json
+.codegraph
 spikes/**/.vite/
 spikes/**/.vitest/
 e2e-observations.json

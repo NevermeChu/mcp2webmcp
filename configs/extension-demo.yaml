@@ -1,0 +1,32 @@
+# WebMCP Gateway extension demo (no MCP-B embed).
+# Load the unpacked MV3 extension from apps/extension.
+# Fixture origin must match allowedOrigins exactly, including the port.
+# 9334 is the extension loopback; do not use 9333 (MCP-B relay).
+
+runtime:
+  name: mcp2webmcp-extension-demo
+  logLevel: info
+
+mcp:
+  stdio:
+    enabled: true
+
+browser:
+  adapter: extension
+  allowedOrigins:
+    - "http://127.0.0.1:18081"
+  extension:
+    host: "127.0.0.1"
+    port: 9334
+
+policy:
+  default: deny
+  rules:
+    - match:
+        origin: "http://127.0.0.1:18081"
+        tool: "echo"
+      action: allow
+
+audit:
+  enabled: true
+  path: "~/.mcp2webmcp/logs/extension-demo-audit.jsonl"

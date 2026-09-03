@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP Gateway extension demo (no embed)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 52rem; }
+      code { background: #f3f3f3; padding: 0.1rem 0.3rem; }
+    </style>
+  </head>
+  <body>
+    <h1>extension-demo — no MCP-B embed</h1>
+    <p>
+      This page only implements a tiny in-page <code>registerTool</code> (site-owned WebMCP).
+      It does <strong>not</strong> load <code>embed.js</code> or <code>@mcp-b/global</code>.
+      The MV3 extension must discover the tool.
+    </p>
+    <p>Origin: <code id="origin"></code></p>
+    <p>Status: <span id="status">registering</span></p>
+    <script>
+      document.getElementById("origin").textContent = location.origin;
+      const statusEl = document.getElementById("status");
+      const registered = new Map();
+
+      const modelContext = {
+        async registerTool(def) {
+          registered.set(def.name, def);
+        },
+        async unregisterTool(name) {
+          registered.delete(name);
+        },
+      };
+      document.modelContext = modelContext;
+      navigator.modelContext = modelContext;
+
+      modelContext
+        .registerTool({
+          name: "echo",
+          description: "Echo the provided message",
+          inputSchema: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+          annotations: { readOnlyHint: true, idempotentHint: true },
+          execute: async ({ message }) => ({
+            content: [{ type: "text", text: `echo:${message}` }],
+          }),
+        })
+        .then(() => {
+          statusEl.textContent = "ready";
+        })
+        .catch((error) => {
+          statusEl.textContent = `register-failed:${error}`;
+        });
+    </script>
+  </body>
+</html>

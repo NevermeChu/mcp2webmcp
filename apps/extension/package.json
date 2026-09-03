@@ -1,0 +1,9 @@
+{
+  "name": "@mcp2webmcp/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome/Edge MV3 extension for WebMCP Gateway (discovery + loopback transport, not an MCP server)",
+  "scripts": {
+    "build": "node -e \"process.stdout.write('unpacked extension: apps/extension\\n')\""
+  }
+}

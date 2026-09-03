@@ -166,3 +166,48 @@ audit:
 `,
   );
 }
+
+export function writeExtensionGatewayConfig(
+  filePath: string,
+  options: {
+    origins: string[];
+    extensionPort: number;
+    auditPath: string;
+  },
+): void {
+  const originRules = options.origins.flatMap((origin) =>
+    ["echo"].map(
+      (tool) => `
+    - match:
+        origin: "${origin}"
+        tool: "${tool}"
+      action: allow`,
+    ),
+  );
+  fs.writeFileSync(
+    filePath,
+    `
+runtime:
+  name: mcp2webmcp-e2e-extension
+  logLevel: warn
+  invocationDeadlineMs: 65000
+mcp:
+  stdio:
+    enabled: true
+browser:
+  adapter: extension
+  allowedOrigins:
+${options.origins.map((origin) => `    - "${origin}"`).join("\n")}
+  extension:
+    host: "127.0.0.1"
+    port: ${options.extensionPort}
+policy:
+  default: deny
+  rules:
+${originRules.join("\n")}
+audit:
+  enabled: true
+  path: "${options.auditPath.replaceAll("\\", "/")}"
+`,
+  );
+}

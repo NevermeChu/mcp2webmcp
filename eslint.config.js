@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "spikes/**",
       "coverage/**",
+      "apps/extension/**",
       "**/test-results/**",
       "**/playwright-report/**",
     ],

@@ -1,0 +1,10 @@
+{
+  "name": "@mcp2webmcp/webmcp-extension-demo-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Static WebMCP echo page with no MCP-B embed. Used with the MV3 extension.",
+  "scripts": {
+    "start": "node src/serve.mjs"
+  }
+}
