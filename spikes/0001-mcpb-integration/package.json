@@ -1,0 +1,28 @@
+{
+  "name": "@mcp2webmcp/spike-0001-mcpb-integration",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run tests/public-api.test.ts tests/policy-boundary.test.ts",
+    "test:e2e": "vitest run tests/real-chain.test.ts",
+    "fixture": "node fixture/serve.mjs",
+    "versions": "node scripts/record-versions.mjs"
+  },
+  "dependencies": {
+    "@mcp-b/global": "5.1.0",
+    "@mcp-b/webmcp-local-relay": "5.1.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "playwright": "^1.56.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

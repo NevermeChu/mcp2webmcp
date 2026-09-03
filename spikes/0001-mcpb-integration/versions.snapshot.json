@@ -1,0 +1,53 @@
+{
+  "capturedAt": "2026-09-02T09:04:22.539Z",
+  "node": "v24.18.1",
+  "platform": "win32 10.0.26200 x64",
+  "packages": {
+    "@mcp-b/webmcp-local-relay": "5.1.0",
+    "@mcp-b/global": "5.1.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0"
+  },
+  "mcpbPublicExports": [
+    "BrowserToRelayMessageSchema",
+    "CallToolRequestParamsSchema",
+    "CallToolResultSchema",
+    "DEFAULT_TOOL_INPUT_SCHEMA",
+    "HelloRequiredError",
+    "InboundToolSchema",
+    "LocalRelayMcpServer",
+    "NormalizedToolSchema",
+    "RelayBridgeServer",
+    "RelayClientToServerMessageSchema",
+    "RelayDescriptorSchema",
+    "RelayHelloAcceptedMessageSchema",
+    "RelayHelloRejectedMessageSchema",
+    "RelayInvokeArgsSchema",
+    "RelayRegistry",
+    "RelayServerToClientMessageSchema",
+    "RelaySourceInfoSchema",
+    "RelayToBrowserMessageSchema",
+    "ServerHelloMessageSchema",
+    "ToolAnnotationsSchema",
+    "ToolSchema",
+    "buildPublicToolName",
+    "extractSanitizedDomain",
+    "normalizeInboundTool",
+    "parseCliOptions",
+    "printHelp",
+    "sanitizeName"
+  ],
+  "webmcp": {
+    "spec": "W3C WebML CG Draft, document.modelContext.registerTool / getTools / toolchange",
+    "specUrl": "https://webmachinelearning.github.io/webmcp/",
+    "chromeTestingFlag": "chrome://flags/#enable-webmcp-testing",
+    "nativeChromeOnThisMachine": "not installed at default path; spike uses @mcp-b/global 5.1.0 as the page runtime",
+    "hostBrowserForE2E": "Playwright as test harness only, not as a product BrowserAdapter"
+  },
+  "referenceMcpClient": {
+    "package": "@modelcontextprotocol/client",
+    "version": "2.0.0",
+    "transport": "@modelcontextprotocol/client/stdio StdioClientTransport"
+  }
+}

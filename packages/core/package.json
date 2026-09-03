@@ -1,0 +1,26 @@
+{
+  "name": "@mcp2webmcp/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebMCP Gateway runtime: registries, namespace, routing, policy, audit",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcp2webmcp/protocol": "workspace:*",
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

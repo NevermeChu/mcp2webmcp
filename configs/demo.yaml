@@ -1,0 +1,43 @@
+# WebMCP Gateway cooperative-embed demo (loopback fixture). Not extension zero-integration.
+# Fixture origin must match allowedOrigins exactly, including the port.
+
+runtime:
+  name: mcp2webmcp-demo
+  logLevel: info
+
+mcp:
+  stdio:
+    enabled: true
+
+browser:
+  adapter: mcpb
+  allowedOrigins:
+    - "http://127.0.0.1:18080"
+  mcpb:
+    host: "127.0.0.1"
+    port: 9333
+    persistPath: "~/.mcp2webmcp/demo-relay-port.json"
+    relayId: mcp2webmcp-demo
+
+policy:
+  default: deny
+  rules:
+    - match:
+        origin: "http://127.0.0.1:18080"
+        tool: "echo"
+      action: allow
+    - match:
+        origin: "http://127.0.0.1:18080"
+        tool: "get_page_title"
+      action: allow
+    - match:
+        origin: "http://127.0.0.1:18080"
+        tool: "add"
+      action: allow
+    - match:
+        destructive: true
+      action: confirm
+
+audit:
+  enabled: true
+  path: "~/.mcp2webmcp/logs/demo-audit.jsonl"

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP Gateway Phase -1 echo fixture (cooperative embed)</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        max-width: 52rem;
+      }
+      code {
+        background: #f3f3f3;
+        padding: 0.1rem 0.3rem;
+      }
+      button {
+        margin-right: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Phase -1 cooperative WebMCP fixture</h1>
+    <p>
+      This page registers a WebMCP <code>echo</code> tool and loads the MCP-B
+      local-relay embed. It is <strong>not</strong> an extension-based
+      zero-integration acceptance.
+    </p>
+    <p>Origin: <code id="origin"></code></p>
+    <p>Status: <span id="status">registering</span></p>
+    <p>
+      <button id="add-extra" type="button">Add extra_ping</button>
+      <button id="remove-extra" type="button">Remove extra_ping</button>
+    </p>
+    <script src="/vendor/global.iife.js"></script>
+    <script>
+      const statusEl = document.getElementById("status");
+      const originEl = document.getElementById("origin");
+      originEl.textContent = location.origin;
+
+      const modelContext = document.modelContext || navigator.modelContext;
+      if (!modelContext || typeof modelContext.registerTool !== "function") {
+        statusEl.textContent = "no-webmcp-runtime";
+        throw new Error("WebMCP runtime missing after @mcp-b/global");
+      }
+
+      let extraController = null;
+
+      async function registerEcho() {
+        await modelContext.registerTool({
+          name: "echo",
+          description: "Echo the provided message back to the caller",
+          inputSchema: {
+            type: "object",
+            properties: {
+              message: { type: "string" },
+            },
+            required: ["message"],
+          },
+          annotations: { readOnlyHint: true, idempotentHint: true },
+          execute: async ({ message }) => ({
+            content: [{ type: "text", text: `echo:${message}` }],
+          }),
+        });
+      }
+
+      document.getElementById("add-extra").addEventListener("click", async () => {
+        if (extraController) return;
+        extraController = new AbortController();
+        await modelContext.registerTool(
+          {
+            name: "extra_ping",
+            description: "Dynamic extra tool used by the spike lifecycle test",
+            inputSchema: { type: "object", properties: {} },
+            execute: async () => ({
+              content: [{ type: "text", text: "pong" }],
+            }),
+          },
+          { signal: extraController.signal },
+        );
+        statusEl.textContent = "echo+extra_ping";
+      });
+
+      document.getElementById("remove-extra").addEventListener("click", () => {
+        extraController?.abort();
+        extraController = null;
+        statusEl.textContent = "echo";
+      });
+
+      registerEcho()
+        .then(() => {
+          statusEl.textContent = "echo";
+        })
+        .catch((error) => {
+          statusEl.textContent = `register-failed:${error}`;
+          console.error(error);
+        });
+    </script>
+    <script
+      src="/vendor/embed.js"
+      data-relay-host="127.0.0.1"
+      data-relay-port="__RELAY_PORT__"
+      data-debug
+    ></script>
+  </body>
+</html>

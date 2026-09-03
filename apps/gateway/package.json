@@ -1,0 +1,24 @@
+{
+  "name": "@mcp2webmcp/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebMCP Gateway stdio process (CLI: mcp2webmcp)",
+  "bin": {
+    "mcp2webmcp": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@mcp2webmcp/browser-adapter": "workspace:*",
+    "@mcp2webmcp/core": "workspace:*",
+    "@mcp2webmcp/mcp-transport": "workspace:*",
+    "@mcp2webmcp/protocol": "workspace:*",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

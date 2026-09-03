@@ -1,0 +1,14 @@
+{
+  "name": "@mcp2webmcp/webmcp-demo-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebMCP Gateway cooperative-embed demo page. Not extension zero-integration.",
+  "scripts": {
+    "start": "node src/serve.mjs"
+  },
+  "dependencies": {
+    "@mcp-b/global": "5.1.0",
+    "@mcp-b/webmcp-local-relay": "5.1.0"
+  }
+}

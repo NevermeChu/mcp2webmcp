@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/core" },
+    { "path": "./packages/browser-adapter" },
+    { "path": "./packages/mcp-transport" },
+    { "path": "./apps/gateway" }
+  ]
+}

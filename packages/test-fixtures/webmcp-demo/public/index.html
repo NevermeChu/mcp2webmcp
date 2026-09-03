@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en" data-relay-port="__RELAY_PORT__">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP Gateway webmcp-demo (cooperative embed)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 52rem; }
+      code { background: #f3f3f3; padding: 0.1rem 0.3rem; }
+      button { margin-right: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>webmcp-demo — cooperative page mode</h1>
+    <p>
+      This fixture registers WebMCP tools and loads the MCP-B local-relay
+      <strong>embed</strong>. It is <strong>not</strong> extension-based
+      zero-integration acceptance.
+    </p>
+    <p>Origin: <code id="origin"></code></p>
+    <p>Status: <span id="status">registering</span></p>
+    <p>
+      <button id="add-extra" type="button">Add extra_ping</button>
+      <button id="remove-extra" type="button">Remove extra_ping</button>
+    </p>
+    <script src="/vendor/global.iife.js"></script>
+    <script>
+      const statusEl = document.getElementById("status");
+      document.getElementById("origin").textContent = location.origin;
+      window.__backupRan = false;
+      window.__slowStarted = false;
+
+      const modelContext = document.modelContext || navigator.modelContext;
+      if (!modelContext || typeof modelContext.registerTool !== "function") {
+        statusEl.textContent = "no-webmcp-runtime";
+        throw new Error("WebMCP runtime missing after @mcp-b/global");
+      }
+
+      let extraController = null;
+
+      async function registerCoreTools() {
+        await modelContext.registerTool({
+          name: "echo",
+          description: "Echo the provided message",
+          inputSchema: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+          annotations: { readOnlyHint: true, idempotentHint: true },
+          execute: async ({ message }) => ({
+            content: [{ type: "text", text: `echo:${message}` }],
+          }),
+        });
+        await modelContext.registerTool({
+          name: "get_page_title",
+          description: "Return document.title",
+          inputSchema: { type: "object", properties: {} },
+          annotations: { readOnlyHint: true, idempotentHint: true },
+          execute: async () => ({
+            content: [{ type: "text", text: document.title }],
+          }),
+        });
+        await modelContext.registerTool({
+          name: "add",
+          description: "Add two numbers",
+          inputSchema: {
+            type: "object",
+            properties: {
+              a: { type: "number" },
+              b: { type: "number" },
+            },
+            required: ["a", "b"],
+          },
+          annotations: { readOnlyHint: true, idempotentHint: true },
+          execute: async ({ a, b }) => ({
+            content: [{ type: "text", text: String(Number(a) + Number(b)) }],
+          }),
+        });
+        await modelContext.registerTool({
+          name: "safe_backup",
+          description: "Misleading name; page marks this destructive",
+          inputSchema: { type: "object", properties: {} },
+          annotations: { destructiveHint: true, readOnlyHint: false },
+          execute: async () => {
+            window.__backupRan = true;
+            return { content: [{ type: "text", text: "backed-up" }] };
+          },
+        });
+        await modelContext.registerTool({
+          name: "slow_write",
+          description: "Sleeps so tests can reload or time out mid-invocation",
+          inputSchema: { type: "object", properties: {} },
+          execute: async () => {
+            window.__slowStarted = true;
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            return { content: [{ type: "text", text: "slow-done" }] };
+          },
+        });
+      }
+
+      document.getElementById("add-extra").addEventListener("click", async () => {
+        if (extraController) return;
+        extraController = new AbortController();
+        await modelContext.registerTool(
+          {
+            name: "extra_ping",
+            description: "Dynamic extra tool",
+            inputSchema: { type: "object", properties: {} },
+            execute: async () => ({
+              content: [{ type: "text", text: "pong" }],
+            }),
+          },
+          { signal: extraController.signal },
+        );
+        statusEl.textContent = "ready+extra_ping";
+      });
+
+      document.getElementById("remove-extra").addEventListener("click", () => {
+        extraController?.abort();
+        extraController = null;
+        statusEl.textContent = "ready";
+      });
+
+      registerCoreTools()
+        .then(() => {
+          const embed = document.createElement("script");
+          embed.src = "/vendor/embed.js";
+          embed.dataset.relayHost = "127.0.0.1";
+          embed.dataset.relayPort = document.documentElement.dataset.relayPort ?? "9333";
+          embed.dataset.debug = "";
+          embed.onload = () => {
+            statusEl.textContent = "ready";
+          };
+          embed.onerror = () => {
+            statusEl.textContent = "embed-failed";
+          };
+          document.body.appendChild(embed);
+        })
+        .catch((error) => {
+          statusEl.textContent = `register-failed:${error}`;
+          console.error(error);
+        });
+    </script>
+  </body>
+</html>

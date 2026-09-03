@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+  - "packages/test-fixtures/*"
+  - "apps/*"
+
+allowBuilds:
+  esbuild: true
+
+verifyDepsBeforeRun: false

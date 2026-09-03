@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp2webmcp-demo": {
+      "command": "node",
+      "args": [
+        "REPO_ROOT/apps/gateway/dist/main.js",
+        "--config",
+        "REPO_ROOT/configs/demo.yaml"
+      ]
+    }
+  }
+}

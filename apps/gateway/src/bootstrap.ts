@@ -1,0 +1,49 @@
+import { discoveredTool, FakeBrowserAdapter, McpBAdapter } from "@mcp2webmcp/browser-adapter";
+import { createRuntime } from "@mcp2webmcp/core";
+import { McpStdioServer } from "@mcp2webmcp/mcp-transport";
+import type { BrowserSource, RuntimeConfig } from "@mcp2webmcp/protocol";
+
+export async function bootstrap(config: RuntimeConfig): Promise<McpStdioServer> {
+  const runtime = createRuntime(config);
+  if (config.browser.adapter === "fake") {
+    const adapter = new FakeBrowserAdapter("fake-1");
+    await runtime.attach(adapter);
+    if (process.env.MCP2WEBMCP_FAKE_ECHO === "1") {
+      adapter.connectSource(demoSource());
+      adapter.registerTool("tab-18", discoveredTool("echo"));
+    }
+  } else if (config.browser.adapter === "mcpb") {
+    const mcpb = config.browser.mcpb ?? {};
+    await runtime.attach(
+      new McpBAdapter({
+        adapterId: "mcpb-1",
+        allowedOrigins: config.browser.allowedOrigins,
+        host: mcpb.host,
+        port: mcpb.port,
+        persistPath: mcpb.persistPath,
+        relayId: mcpb.relayId,
+        label: mcpb.label,
+        invokeTimeoutMs: mcpb.invokeTimeoutMs ?? config.runtime.invocationDeadlineMs,
+        maxPayloadBytes: mcpb.maxPayloadBytes,
+      }),
+    );
+  }
+  return new McpStdioServer(runtime, config);
+}
+
+function demoSource(): Omit<
+  BrowserSource,
+  "adapterId" | "adapterType" | "state" | "updatedAt"
+> & { connectedAt: number } {
+  const now = Date.now();
+  return {
+    sourceId: "tab-18",
+    generation: 1,
+    browserId: "browser-1",
+    tabId: "18",
+    origin: "https://knowmesh.app",
+    url: "https://knowmesh.app/docs",
+    title: "fake echo",
+    connectedAt: now,
+  };
+}

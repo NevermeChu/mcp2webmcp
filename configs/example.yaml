@@ -1,0 +1,49 @@
+# WebMCP Gateway (mcp2webmcp) KnowMesh-oriented skeleton. Replace origin and tool names before use.
+# Cooperative embed still required in v0.1. See docs/connect-mcp-client.md.
+
+runtime:
+  name: mcp2webmcp
+  logLevel: info
+
+mcp:
+  stdio:
+    enabled: true
+
+browser:
+  adapter: mcpb
+  allowedOrigins:
+    - "https://knowmesh.app"
+  mcpb:
+    host: "127.0.0.1"
+    persistPath: "~/.mcp2webmcp/relay-port.json"
+    relayId: mcp2webmcp
+
+policy:
+  default: deny
+  rules:
+    - match:
+        origin: "https://knowmesh.app"
+        tool: "search_documents"
+      action: allow
+    - match:
+        origin: "https://knowmesh.app"
+        tool: "get_document"
+      action: allow
+    - match:
+        destructive: true
+      action: confirm
+    - match:
+        tool: "delete_*"
+      action: confirm
+
+audit:
+  enabled: true
+  path: "~/.mcp2webmcp/logs/audit.jsonl"
+
+limits:
+  maxToolsPerSource: 100
+  maxToolsTotal: 500
+  maxInputBytes: 1048576
+  maxOutputBytes: 4194304
+  maxSchemaBytes: 262144
+  maxQueuePerSource: 16

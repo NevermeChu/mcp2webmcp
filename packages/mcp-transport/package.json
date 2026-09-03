@@ -1,0 +1,29 @@
+{
+  "name": "@mcp2webmcp/mcp-transport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "stdio MCP transport for WebMCP Gateway (mcp2webmcp)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcp2webmcp/browser-adapter": "workspace:*",
+    "@mcp2webmcp/core": "workspace:*",
+    "@mcp2webmcp/protocol": "workspace:*",
+    "@modelcontextprotocol/server": "2.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
