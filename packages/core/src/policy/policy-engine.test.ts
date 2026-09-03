@@ -56,6 +56,19 @@ describe("PolicyEngine", () => {
     expect(engine.evaluate(context("list_notes")).action).toBe("deny");
   });
 
+  it("lets a yaml confirm win over consent when MCP-B drops destructiveHint", () => {
+    const consent = new MemoryConsentStore();
+    consent.admit("https://knowmesh.app", "safe_backup");
+    const withConsent = new PolicyEngine(
+      {
+        default: "deny",
+        rules: [{ match: { tool: "safe_backup" }, action: "confirm" }],
+      },
+      consent,
+    );
+    expect(withConsent.evaluate(context("safe_backup")).action).toBe("confirm");
+  });
+
   it("lets a yaml deny win over consent", () => {
     const consent = new MemoryConsentStore();
     consent.admit("https://knowmesh.app", "echo");

@@ -91,7 +91,7 @@ v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条
 ## 常见问题
 
 - **列表里没有页面工具**：mcpb 的 origin 必须与 `allowedOrigins` 逐字一致（含协议和端口）。`localhost` 和 `127.0.0.1` 不是同一个 origin。extension 在 `consent.enabled` 且 `allowedOrigins: []` 时会接入扩展看到的所有 origin。
-- **工具在但调用失败 `POLICY_DENIED`**：default deny；若未开启 consent，allow 规则必须是精确 origin + 精确页面工具名。开启 consent 后，发现会自动放行；撤销用 `webmcp_revoke_consent`。yaml deny / `destructiveHint`→confirm 仍然优先。
+- **工具在但调用失败 `POLICY_DENIED`**：default deny；若未开启 consent，allow 规则必须是精确 origin + 精确页面工具名。开启 consent 后，发现会自动放行；撤销用 `webmcp_revoke_consent`。yaml deny / `destructiveHint`→confirm 仍然优先。cooperative embed 经 MCP-B 时页面 `destructiveHint` 可能到不了 Gateway，对 `safe_backup` 这类工具要用 yaml 按 **originalName** 写 confirm。
 - **`allowedOrigins: "*"`**：`mcpb` 与 `extension` adapter 均拒绝。
 - **KnowMesh 等业务站**：用扩展路径时站点只 `registerTool`，runtime 由扩展补（[ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)）。`configs/extension-demo.yaml` 默认空 allowlist + 同意账本；也可用 yaml `allowedOrigins` 锁死 origin。cooperative embed 路径仍见 `configs/example.yaml`。
 - **relay 端口被占用**：同时改 `configs/demo.yaml` 的 `browser.mcpb.port` 和 fixture 的 `MCP2WEBMCP_E2E_RELAY_PORT`。

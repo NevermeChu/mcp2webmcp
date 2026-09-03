@@ -35,6 +35,9 @@ policy:
         tool: "add"
       action: allow
     - match:
+        tool: "safe_backup"
+      action: confirm
+    - match:
         destructive: true
       action: confirm
 

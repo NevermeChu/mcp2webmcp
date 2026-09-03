@@ -146,6 +146,9 @@ policy:
   default: deny
   rules:
     - match:
+        tool: "safe_backup"
+      action: confirm
+    - match:
         destructive: true
       action: confirm
 consent:
