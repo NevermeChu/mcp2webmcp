@@ -3,7 +3,7 @@
 Captured: 2026-09-02  
 Machine: Windows 10.0.26200 x64, Node.js v24.18.1  
 Spike directory: `spikes/0001-mcpb-integration`  
-Architecture source: [docs/architecture.md](../architecture.md) §27 Phase -1 / §33
+Architecture source: historical implementation spec (local `docs/local/implementation.md` if present). Public overview: [architecture.md](../architecture.md).
 
 ## Gate conclusion
 

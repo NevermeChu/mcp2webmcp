@@ -67,4 +67,5 @@ Forbidden by the architecture and unnecessary given public `RelayRegistry` / `in
 - Architecture: [docs/architecture.md](../architecture.md)
 - ADR-0003 (use MCP-B as compatibility layer) — confirmed
 - ADR-0005 (per-client stdio Gateway, shared browser relay) — confirmed by client-mode promotion
-- ADR-0006 (cooperative embed now, extension later) — confirmed as v0.1 access path
+- ADR-0006 (embed E2E is not extension acceptance) — confirmed
+- ADR-0008 (ExtensionAdapter + MV3 loopback) — shipped as the parallel no-embed path

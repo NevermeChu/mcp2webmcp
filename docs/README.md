@@ -1,13 +1,15 @@
-# Documentation
+# 文档
 
-WebMCP Gateway（**mcp2webmcp**）：让暂未支持 WebMCP 的 MCP 客户端调用页面工具。调用路径是 WebMCP → Gateway → MCP。
-
-| Document | Purpose |
+| 文档 | 内容 |
 | --- | --- |
-| [architecture.md](architecture.md) | Design spec (identity, namespace, policy, audit, adapters, phases) |
-| [connect-mcp-client.md](connect-mcp-client.md) | Wire Cursor / Claude Desktop to the stdio Gateway |
-| [extension-loopback-protocol.md](extension-loopback-protocol.md) | MV3 extension ↔ ExtensionAdapter JSON protocol |
-| [adr/0000-mcpb-integration-mode.md](adr/0000-mcpb-integration-mode.md) | Why v0.1 wraps MCP-B `RelayBridgeServer` |
-| [spikes/0001-mcpb-integration.md](spikes/0001-mcpb-integration.md) | Phase -1 real-chain gate notes |
+| [connect-mcp-client.md](connect-mcp-client.md) | 接到 Cursor / Claude Desktop |
+| [architecture.md](architecture.md) | 架构与仓库结构 |
+| [extension-loopback-protocol.md](extension-loopback-protocol.md) | 扩展 ↔ Gateway JSON 协议 |
+| [develop.md](develop.md) | 测试与配置 |
+| [adr/0000-mcpb-integration-mode.md](adr/0000-mcpb-integration-mode.md) | 为何包装 MCP-B `RelayBridgeServer` |
+| [adr/0008-extension-adapter-loopback.md](adr/0008-extension-adapter-loopback.md) | 扩展 loopback，扩展不是 MCP server |
+| [spikes/0001-mcpb-integration.md](spikes/0001-mcpb-integration.md) | 历史：Phase -1 真实链路记录 |
 
-The disposable spike source lives in `spikes/0001-mcpb-integration`. It is evidence, not the product Core.
+一次性 spike 源码在 `spikes/0001-mcpb-integration`。
+
+实现规格（阶段、验收清单、Coding Agent 指令）只保留在本地 `docs/local/`，不入库。

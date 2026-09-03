@@ -92,13 +92,19 @@ v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条
 
 - **列表里没有页面工具**：页面 origin 必须与 `allowedOrigins` 逐字一致（含协议和端口）。`localhost` 和 `127.0.0.1` 不是同一个 origin。
 - **工具在但调用失败 `POLICY_DENIED`**：default deny；allow 规则必须是精确 origin + 精确页面工具名（`echo` 而不是 MCP 上的 namespace 名）。
-- **`allowedOrigins: "*"`**：生产与 mcpb adapter 均拒绝。
+- **`allowedOrigins: "*"`**：`mcpb` 与 `extension` adapter 均拒绝。
 - **relay 端口被占用**：同时改 `configs/demo.yaml` 的 `browser.mcpb.port` 和 fixture 的 `MCP2WEBMCP_E2E_RELAY_PORT`。
 - **KnowMesh 等业务站**：用扩展路径时站点只 `registerTool`，把 yaml 的 origin/tool allowlist 改成真实 origin。没有 WebMCP runtime 时扩展会失败，不会偷偷当 polyfill。cooperative embed 路径仍见 `configs/example.yaml`。
 
 ## 相关文件
 
-- `configs/demo.yaml` — loopback demo
+- `configs/demo.yaml` — cooperative embed（fixture `:18080`，relay `:9333`）
+- `configs/extension-demo.yaml` — ExtensionAdapter（fixture `:18081`，loopback `:9334`）
+- `configs/mcp-client.example.json` / `configs/mcp-client.extension.example.json` — Cursor / Claude 模板
 - `configs/example.yaml` — KnowMesh 风格示例（需自行改 origin/工具名）
-- `packages/test-fixtures/webmcp-demo` — cooperative 页面
-- `docs/architecture.md` — 设计规格
+- `packages/test-fixtures/webmcp-demo` — cooperative embed 页面
+- `packages/test-fixtures/webmcp-extension-demo` — 无 embed 夹具
+- `apps/extension` — 未打包 MV3 扩展
+- [extension-loopback-protocol.md](extension-loopback-protocol.md) — 扩展 ↔ Gateway JSON
+- [architecture.md](architecture.md) — 架构
+- [develop.md](develop.md) — 测试与配置
