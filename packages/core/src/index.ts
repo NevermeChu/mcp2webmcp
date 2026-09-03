@@ -7,6 +7,12 @@ export { ToolRouter } from "./routing/tool-router.js";
 export { LifecycleManager } from "./lifecycle/lifecycle-manager.js";
 export { PolicyEngine } from "./policy/policy-engine.js";
 export { ConfirmationManager } from "./policy/confirmation-manager.js";
+export {
+  DisabledConsentStore,
+  FileConsentStore,
+  MemoryConsentStore,
+} from "./policy/consent-store.js";
+export type { ConsentStore } from "./policy/consent-store.js";
 export { AuditLogger } from "./audit/audit-logger.js";
 export { createRuntime } from "./runtime.js";
 export type { Runtime } from "./runtime.js";

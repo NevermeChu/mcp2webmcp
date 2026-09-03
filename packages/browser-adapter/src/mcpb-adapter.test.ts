@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { McpBAdapter } from "./mcpb-adapter.js";
 import { demoRelaySource, demoRelayTool, FakeRelayBridge } from "./fake-relay-bridge.js";
-import { assertExplicitOrigins, assertLoopbackHost } from "./mcpb-safety.js";
+import { assertExplicitOrigins, assertLoopbackHost, assertOriginPolicy, originIsAllowed } from "./mcpb-safety.js";
 
 describe("mcpb safety", () => {
   it("rejects wildcard origins and non-loopback hosts", () => {
     expect(() => assertExplicitOrigins(["*"])).toThrow(/\*/);
     expect(() => assertExplicitOrigins([])).toThrow(/explicit/);
+    expect(() => assertOriginPolicy(["*"])).toThrow(/\*/);
+    expect(originIsAllowed([], "http://127.0.0.1:18081")).toBe(true);
+    expect(originIsAllowed(["http://127.0.0.1:18081"], "http://localhost:18081")).toBe(false);
     expect(() => assertLoopbackHost("0.0.0.0")).toThrow(/loopback/);
     expect(() => assertLoopbackHost("127.0.0.1")).not.toThrow();
   });

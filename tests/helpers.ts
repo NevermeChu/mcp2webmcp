@@ -1,6 +1,14 @@
 import type { BrowserSource, RuntimeConfig } from "@mcp2webmcp/protocol";
 import { defaultResourceLimits } from "@mcp2webmcp/protocol";
 
+export function disabledConsent(path = "consent.json"): RuntimeConfig["consent"] {
+  return { enabled: false, autoAdmit: false, path };
+}
+
+export function enabledConsent(path: string): RuntimeConfig["consent"] {
+  return { enabled: true, autoAdmit: true, path };
+}
+
 export function testSource(overrides: Partial<BrowserSource> = {}): BrowserSource {
   return {
     adapterId: "fake-1",
@@ -51,6 +59,7 @@ export function testConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfi
       maxBytes: 1_048_576,
     },
     limits: { ...defaultResourceLimits },
+    consent: disabledConsent(),
   };
   return {
     ...base,
@@ -63,6 +72,7 @@ export function testConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfi
       mcpb: overrides.browser?.mcpb ?? base.browser.mcpb,
     },
     policy: overrides.policy ?? base.policy,
+    consent: overrides.consent ?? base.consent,
     audit: { ...base.audit, ...overrides.audit },
     limits: { ...base.limits, ...overrides.limits },
   };

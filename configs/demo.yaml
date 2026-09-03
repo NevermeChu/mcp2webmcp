@@ -38,6 +38,11 @@ policy:
         destructive: true
       action: confirm
 
+consent:
+  enabled: true
+  autoAdmit: true
+  path: "~/.mcp2webmcp/demo-consent.json"
+
 audit:
   enabled: true
   path: "~/.mcp2webmcp/logs/demo-audit.jsonl"

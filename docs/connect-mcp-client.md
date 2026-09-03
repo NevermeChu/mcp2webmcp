@@ -7,7 +7,7 @@
 两条接入：
 
 1. **cooperative embed**（`configs/demo.yaml`）：页面除了 `registerTool` 还要加载 MCP-B embed。
-2. **ExtensionAdapter**（`configs/extension-demo.yaml`）：加载 `apps/extension`，页面只需 WebMCP `registerTool`，不要让扩展自己当 MCP server。
+2. **ExtensionAdapter**（`configs/extension-demo.yaml`）：加载 `apps/extension`，页面只需 `registerTool`（runtime 由扩展补，见 [ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)），不要让扩展自己当 MCP server。
 
 默认 Gateway 仍可以是 `adapter: mcpb`。扩展 loopback 默认 `127.0.0.1:9334`，不要占用 MCP-B 的 `9333`。
 
@@ -66,7 +66,7 @@ pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
 
 打开 `http://127.0.0.1:18081`。
 4. 在项目 `.cursor/mcp.json` 里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），不要改掉已有 `mcp2webmcp-demo` 的 `demo.yaml`。
-5. Cursor 服务名 `mcp2webmcp-extension-demo`。`webmcp_list_tools` 应看到 `originalName: echo`；调用参数 `{ "message": "hello" }` 返回 `echo:hello`。
+5. Cursor 服务名 `mcp2webmcp-extension-demo`。页面 `registerTool` 后 `webmcp_list_tools` 应看到该工具（`consented: true`）。不想给 MCP 用时调用 `webmcp_revoke_consent`（`origin` + 可选 `tool`）。
 
 v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条浏览器连接留到下一步。
 
@@ -90,11 +90,11 @@ v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条
 
 ## 常见问题
 
-- **列表里没有页面工具**：页面 origin 必须与 `allowedOrigins` 逐字一致（含协议和端口）。`localhost` 和 `127.0.0.1` 不是同一个 origin。
-- **工具在但调用失败 `POLICY_DENIED`**：default deny；allow 规则必须是精确 origin + 精确页面工具名（`echo` 而不是 MCP 上的 namespace 名）。
+- **列表里没有页面工具**：mcpb 的 origin 必须与 `allowedOrigins` 逐字一致（含协议和端口）。`localhost` 和 `127.0.0.1` 不是同一个 origin。extension 在 `consent.enabled` 且 `allowedOrigins: []` 时会接入扩展看到的所有 origin。
+- **工具在但调用失败 `POLICY_DENIED`**：default deny；若未开启 consent，allow 规则必须是精确 origin + 精确页面工具名。开启 consent 后，发现会自动放行；撤销用 `webmcp_revoke_consent`。yaml deny / `destructiveHint`→confirm 仍然优先。
 - **`allowedOrigins: "*"`**：`mcpb` 与 `extension` adapter 均拒绝。
+- **KnowMesh 等业务站**：用扩展路径时站点只 `registerTool`，runtime 由扩展补（[ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)）。`configs/extension-demo.yaml` 默认空 allowlist + 同意账本；也可用 yaml `allowedOrigins` 锁死 origin。cooperative embed 路径仍见 `configs/example.yaml`。
 - **relay 端口被占用**：同时改 `configs/demo.yaml` 的 `browser.mcpb.port` 和 fixture 的 `MCP2WEBMCP_E2E_RELAY_PORT`。
-- **KnowMesh 等业务站**：用扩展路径时站点只 `registerTool`，把 yaml 的 origin/tool allowlist 改成真实 origin。没有 WebMCP runtime 时扩展会失败，不会偷偷当 polyfill。cooperative embed 路径仍见 `configs/example.yaml`。
 
 ## 相关文件
 
@@ -108,3 +108,4 @@ v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条
 - [extension-loopback-protocol.md](extension-loopback-protocol.md) — 扩展 ↔ Gateway JSON
 - [architecture.md](architecture.md) — 架构
 - [develop.md](develop.md) — 测试与配置
+- [adr/0009-extension-webmcp-runtime-polyfill.md](adr/0009-extension-webmcp-runtime-polyfill.md) — 扩展补页面 runtime

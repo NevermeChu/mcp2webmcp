@@ -47,18 +47,20 @@ function rememberTool(def, options) {
   });
   const signal = options?.signal;
   if (signal && typeof signal.addEventListener === "function") {
-    signal.addEventListener(
-      "abort",
-      () => {
-        tools.delete(def.name);
-        publishSnapshot();
-      },
-      { once: true },
-    );
+    const drop = () => {
+      tools.delete(def.name);
+      publishSnapshot();
+    };
+    if (signal.aborted) {
+      drop();
+      return;
+    }
+    signal.addEventListener("abort", drop, { once: true });
   }
 }
 
 function wrapContext(ctx) {
+  // Wrap whoever provided registerTool (native / polyfill / page). Do not create a host here.
   if (!ctx || typeof ctx.registerTool !== "function") return ctx;
   if (ctx.__mcp2webmcpWrapped) return ctx;
   const originalRegister = ctx.registerTool.bind(ctx);

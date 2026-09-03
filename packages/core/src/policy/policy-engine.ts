@@ -1,19 +1,29 @@
 import type { PolicyConfig, PolicyContext, PolicyDecision, PolicyRule } from "@mcp2webmcp/protocol";
+import type { ConsentStore } from "./consent-store.js";
 
 export class PolicyEngine {
-  constructor(private readonly config: PolicyConfig) {}
+  constructor(
+    private readonly config: PolicyConfig,
+    private readonly consent?: ConsentStore,
+  ) {}
 
   evaluate(context: PolicyContext): PolicyDecision {
     let decision: PolicyDecision =
       this.config.default === "allow"
         ? { action: "allow" }
         : { action: "deny", reason: "default deny" };
+    let matched = false;
 
     for (const rule of this.config.rules) {
       if (this.matches(rule, context)) {
         decision = this.decisionFrom(rule);
+        matched = true;
         break;
       }
+    }
+
+    if (!matched && this.consent?.enabled && this.consent.allows(context.source.origin, context.tool.identity.originalName)) {
+      decision = { action: "allow" };
     }
 
     if (decision.action === "allow" && context.tool.annotations?.destructiveHint) {

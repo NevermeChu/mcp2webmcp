@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP Gateway extension demo (zero tools)</title>
+  </head>
+  <body>
+    <h1>extension-demo — runtime only</h1>
+    <p>This page does not call <code>registerTool</code>.</p>
+    <p>Status: <span id="status">waiting</span></p>
+    <script>
+      const statusEl = document.getElementById("status");
+      const ctx = document.modelContext || navigator.modelContext;
+      const brand = Symbol.for("mcp2webmcp.webmcp-runtime-polyfill");
+      window.__runtimeProbe = {
+        runtimePresent: Boolean(ctx && typeof ctx.registerTool === "function"),
+        toolCount: typeof ctx?.getTools === "function" ? ctx.getTools().length : -1,
+        polyfillBrand: Boolean(ctx && ctx[brand]),
+      };
+      statusEl.textContent = window.__runtimeProbe.runtimePresent ? "ready" : "no-webmcp-runtime";
+    </script>
+  </body>
+</html>

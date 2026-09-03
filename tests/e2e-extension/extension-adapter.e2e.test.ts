@@ -97,6 +97,31 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
     expect(echoResult.isError).not.toBe(true);
     expect(textContent(echoResult)).toContain("echo:hello");
 
+    const revoked = await gateway.client.callTool({
+      name: "webmcp_revoke_consent",
+      arguments: { origin: originA, tool: "echo" },
+    });
+    expect(revoked.isError).not.toBe(true);
+    const denied = await gateway.client.callTool({
+      name: "webmcp_call_tool",
+      arguments: { mcpName: echo.mcpName, arguments: { message: "hello" } },
+    });
+    expect(denied.isError).toBe(true);
+    expect(textContent(denied)).toContain("POLICY_DENIED");
+    await gateway.client.callTool({
+      name: "webmcp_restore_consent",
+      arguments: { origin: originA, tool: "echo" },
+    });
+    await waitFor("echo re-projected", async () => {
+      const { tools } = await gateway.client.listTools({ cacheMode: "refresh" } as never);
+      return tools.some((tool) => tool.name === echo.mcpName) ? true : undefined;
+    });
+    const restored = await gateway.client.callTool({
+      name: echo.mcpName,
+      arguments: { message: "hello" },
+    });
+    expect(restored.isError).not.toBe(true);
+
     const blocked = await openReadyPage(context, originDenied);
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const rows = await listedRows(gateway.client);
@@ -109,7 +134,77 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
       return !remaining.some((row) => row.origin === originA && row.originalName === "echo");
     });
   }, 90_000);
+
+  it("shows runtimePresent with zero tools when the page never registerTool", async () => {
+    const page = await openReadyPage(context, `${originA}/empty.html`);
+    const probe = await page.evaluate(() => {
+      return (globalThis as { __runtimeProbe?: { runtimePresent: boolean; toolCount: number; polyfillBrand: boolean } })
+        .__runtimeProbe;
+    });
+    expect(probe?.runtimePresent).toBe(true);
+    expect(probe?.toolCount).toBe(0);
+    expect(probe?.polyfillBrand).toBe(true);
+
+    const line = await waitFor("popup 0 tools", async () => {
+      const text = await popupLineForOrigin(context, originA);
+      return text?.includes("0 tools") ? text : undefined;
+    });
+    expect(line).not.toContain("no-webmcp-runtime");
+    await page.close();
+  }, 90_000);
+
+  it("keeps a page-owned host and still invokes echo", async () => {
+    const page = await openReadyPage(context, `${originA}/existing-host.html`);
+    const probe = await page.evaluate(() => {
+      return (globalThis as { __runtimeProbe?: { pageOwned: boolean; polyfillBrand: boolean } }).__runtimeProbe;
+    });
+    expect(probe?.pageOwned).toBe(true);
+    expect(probe?.polyfillBrand).toBe(false);
+
+    const echo = await waitForOriginal(gateway.client, "echo", originA);
+    const echoResult = await gateway.client.callTool({
+      name: echo.mcpName,
+      arguments: { message: "from-page-host" },
+    });
+    expect(echoResult.isError).not.toBe(true);
+    expect(textContent(echoResult)).toContain("echo:from-page-host");
+    await page.close();
+    await waitFor("page-host echo gone", async () => {
+      const remaining = await listedRows(gateway.client);
+      return !remaining.some((row) => row.origin === originA && row.originalName === "echo");
+    });
+  }, 90_000);
+
+  it("drops the tool from Gateway when the page aborts registerTool", async () => {
+    const page = await openReadyPage(context, originA);
+    await waitForOriginal(gateway.client, "echo", originA);
+    await page.evaluate(() => {
+      (globalThis as { __abortEcho?: () => void }).__abortEcho?.();
+    });
+    await waitFor("echo gone after abort", async () => {
+      const remaining = await listedRows(gateway.client);
+      return !remaining.some((row) => row.origin === originA && row.originalName === "echo");
+    });
+    await page.close();
+  }, 90_000);
 });
+
+function extensionId(context: BrowserContext): string {
+  const worker = context.serviceWorkers()[0];
+  if (!worker) throw new Error("extension service worker missing");
+  return new URL(worker.url()).host;
+}
+
+async function popupLineForOrigin(context: BrowserContext, origin: string): Promise<string | undefined> {
+  const popup = await context.newPage();
+  try {
+    await popup.goto(`chrome-extension://${extensionId(context)}/popup.html`);
+    const items = await popup.locator("#tabs li").allTextContents();
+    return items.find((line) => line.includes(origin));
+  } finally {
+    await popup.close();
+  }
+}
 
 async function openReadyPage(context: BrowserContext, url: string): Promise<Page> {
   const page = await context.newPage();

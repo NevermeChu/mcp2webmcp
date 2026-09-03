@@ -18,3 +18,4 @@ spikes/**/.vite/
 spikes/**/.vitest/
 e2e-observations.json
 docs/local/
+docs/PROBLEMS.md

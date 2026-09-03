@@ -149,14 +149,25 @@ describe("cooperative embed E2E (not extension zero-integration)", () => {
     await second.client.close();
   }, 90_000);
 
-  it("denies extra_ping, fail-closes misleading destructive tools, and ignores an origin off the allowlist", async () => {
+  it("denies extra_ping after revoke, fail-closes misleading destructive tools, and ignores an origin off the allowlist", async () => {
     const first = gateway;
     const page = await openReadyPage(browser, originA);
     await waitForOriginal(first.client, "echo", originA);
 
     await page.click("#add-extra");
     const extra = await waitForOriginal(first.client, "extra_ping", originA);
-    const denied = await first.client.callTool({ name: extra.mcpName, arguments: {} });
+    const admitted = await first.client.callTool({ name: extra.mcpName, arguments: {} });
+    expect(admitted.isError).not.toBe(true);
+
+    const revoked = await first.client.callTool({
+      name: "webmcp_revoke_consent",
+      arguments: { origin: originA, tool: "extra_ping" },
+    });
+    expect(revoked.isError).not.toBe(true);
+    const denied = await first.client.callTool({
+      name: "webmcp_call_tool",
+      arguments: { mcpName: extra.mcpName, arguments: {} },
+    });
     expect(denied.isError).toBe(true);
     expect(textContent(denied)).toContain("POLICY_DENIED");
 

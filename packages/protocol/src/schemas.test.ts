@@ -102,7 +102,30 @@ describe("protocol schemas", () => {
       audit: { path: "/tmp/audit.jsonl" },
     });
     expect(config.policy.default).toBe("deny");
+    expect(config.consent.enabled).toBe(true);
     expect(config.limits.maxToolsTotal).toBe(500);
+  });
+
+  it("allows extension config with empty allowedOrigins when consent is on", () => {
+    const config = runtimeConfigSchema.parse({
+      runtime: {},
+      browser: { adapter: "extension", allowedOrigins: [] },
+      policy: { default: "deny", rules: [] },
+      audit: { path: "/tmp/audit.jsonl" },
+    });
+    expect(config.browser.allowedOrigins).toEqual([]);
+    expect(config.consent.enabled).toBe(true);
+  });
+
+  it("still requires mcpb allowedOrigins even when consent is on", () => {
+    expect(() =>
+      runtimeConfigSchema.parse({
+        runtime: {},
+        browser: { adapter: "mcpb", allowedOrigins: [] },
+        policy: { default: "deny", rules: [] },
+        audit: { path: "/tmp/audit.jsonl" },
+      }),
+    ).toThrow(/allowedOrigins/);
   });
 
   it("rejects mcpb config that uses a wildcard origin", () => {

@@ -75,6 +75,9 @@ export const MANAGEMENT_TOOL_NAMES = [
   "webmcp_get_tool",
   "webmcp_runtime_status",
   "webmcp_call_tool",
+  "webmcp_list_consent",
+  "webmcp_revoke_consent",
+  "webmcp_restore_consent",
 ] as const;
 
 export type ManagementToolName = (typeof MANAGEMENT_TOOL_NAMES)[number];

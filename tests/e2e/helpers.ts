@@ -122,18 +122,7 @@ export function writeGatewayConfig(filePath: string, options: {
   persistPath: string;
   auditPath: string;
 }): void {
-  const originRules = options.origins.flatMap((origin) => {
-    const tools = origin === options.origins[0]
-      ? ["echo", "get_page_title", "add", "slow_write"]
-      : ["echo"];
-    return tools.map(
-      (tool) => `
-    - match:
-        origin: "${origin}"
-        tool: "${tool}"
-      action: allow`,
-    );
-  });
+  const consentPath = options.auditPath.replace(/audit\.jsonl$/i, "consent.json").replaceAll("\\", "/");
   fs.writeFileSync(
     filePath,
     `
@@ -156,10 +145,13 @@ ${options.origins.map((origin) => `    - "${origin}"`).join("\n")}
 policy:
   default: deny
   rules:
-${originRules.join("\n")}
     - match:
         destructive: true
       action: confirm
+consent:
+  enabled: true
+  autoAdmit: true
+  path: "${consentPath}"
 audit:
   enabled: true
   path: "${options.auditPath.replaceAll("\\", "/")}"
@@ -175,15 +167,7 @@ export function writeExtensionGatewayConfig(
     auditPath: string;
   },
 ): void {
-  const originRules = options.origins.flatMap((origin) =>
-    ["echo"].map(
-      (tool) => `
-    - match:
-        origin: "${origin}"
-        tool: "${tool}"
-      action: allow`,
-    ),
-  );
+  const consentPath = options.auditPath.replace(/audit\.jsonl$/i, "consent.json").replaceAll("\\", "/");
   fs.writeFileSync(
     filePath,
     `
@@ -204,7 +188,13 @@ ${options.origins.map((origin) => `    - "${origin}"`).join("\n")}
 policy:
   default: deny
   rules:
-${originRules.join("\n")}
+    - match:
+        destructive: true
+      action: confirm
+consent:
+  enabled: true
+  autoAdmit: true
+  path: "${consentPath}"
 audit:
   enabled: true
   path: "${options.auditPath.replaceAll("\\", "/")}"

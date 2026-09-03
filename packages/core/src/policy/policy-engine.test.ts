@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PolicyEngine } from "./policy-engine.js";
+import { MemoryConsentStore } from "./consent-store.js";
 import { NamespaceResolver } from "../routing/namespace-resolver.js";
 import { testConfig, testSource } from "../../../../tests/helpers.js";
 
@@ -45,5 +46,26 @@ describe("PolicyEngine", () => {
 
   it("matches deny/confirm globs but never auto-allows them", () => {
     expect(engine.evaluate(context("delete_all")).action).toBe("confirm");
+  });
+
+  it("allows a discovered tool when consent has admitted it", () => {
+    const consent = new MemoryConsentStore();
+    consent.admit("https://knowmesh.app", "list_notes");
+    const withConsent = new PolicyEngine(testConfig().policy, consent);
+    expect(withConsent.evaluate(context("list_notes")).action).toBe("allow");
+    expect(engine.evaluate(context("list_notes")).action).toBe("deny");
+  });
+
+  it("lets a yaml deny win over consent", () => {
+    const consent = new MemoryConsentStore();
+    consent.admit("https://knowmesh.app", "echo");
+    const withConsent = new PolicyEngine(
+      {
+        default: "deny",
+        rules: [{ match: { origin: "https://knowmesh.app", tool: "echo" }, action: "deny" }],
+      },
+      consent,
+    );
+    expect(withConsent.evaluate(context("echo")).action).toBe("deny");
   });
 });

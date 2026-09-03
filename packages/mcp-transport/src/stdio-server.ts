@@ -124,6 +124,53 @@ export class McpStdioServer {
         })) as CallToolResult;
       },
     );
+    this.server.registerTool(
+      "webmcp_list_consent",
+      { description: "List auto-admitted origins and tools; revoked entries stay until restored" },
+      async () => handlers.listConsent(),
+    );
+    this.server.registerTool(
+      "webmcp_revoke_consent",
+      {
+        description: "Revoke an origin or one tool so MCP will not project or invoke it",
+        inputSchema: fromJsonSchema({
+          type: "object",
+          properties: {
+            origin: { type: "string" },
+            tool: { type: "string" },
+          },
+          required: ["origin"],
+        } as JsonSchemaType),
+      },
+      async (args): Promise<CallToolResult> => {
+        const record = asRecord(args);
+        return (await handlers.revokeConsent({
+          origin: typeof record.origin === "string" ? record.origin : undefined,
+          tool: typeof record.tool === "string" ? record.tool : undefined,
+        })) as CallToolResult;
+      },
+    );
+    this.server.registerTool(
+      "webmcp_restore_consent",
+      {
+        description: "Re-enable a previously revoked origin or tool",
+        inputSchema: fromJsonSchema({
+          type: "object",
+          properties: {
+            origin: { type: "string" },
+            tool: { type: "string" },
+          },
+          required: ["origin"],
+        } as JsonSchemaType),
+      },
+      async (args): Promise<CallToolResult> => {
+        const record = asRecord(args);
+        return (await handlers.restoreConsent({
+          origin: typeof record.origin === "string" ? record.origin : undefined,
+          tool: typeof record.tool === "string" ? record.tool : undefined,
+        })) as CallToolResult;
+      },
+    );
   }
 }
 

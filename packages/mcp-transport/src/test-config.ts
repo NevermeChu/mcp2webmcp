@@ -24,5 +24,6 @@ export function testRuntimeConfig(auditPath: string): RuntimeConfig {
     },
     audit: { enabled: true, path: auditPath, maxBytes: 1_048_576 },
     limits: { ...defaultResourceLimits },
+    consent: { enabled: false, autoAdmit: false, path: "consent.json" },
   };
 }

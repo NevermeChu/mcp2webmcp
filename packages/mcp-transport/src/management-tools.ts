@@ -40,6 +40,9 @@ export function createManagementHandlers(
             origin: source?.origin,
             status: tool.status,
             sourceGeneration: tool.sourceGeneration,
+            consented:
+              !runtime.consent.enabled ||
+              Boolean(source && runtime.consent.allows(source.origin, tool.identity.originalName)),
           };
         }),
       );
@@ -98,6 +101,56 @@ export function createManagementHandlers(
         },
       );
       return mapInvokeResult(result);
+    },
+
+    async listConsent() {
+      return jsonText({
+        enabled: runtime.consent.enabled,
+        autoAdmit: runtime.consent.autoAdmit,
+        origins: runtime.consent.list(),
+      });
+    },
+
+    async revokeConsent(input: { origin?: string; tool?: string }) {
+      if (!runtime.consent.enabled) {
+        return {
+          content: [{ type: "text", text: "INVALID_INPUT: consent is disabled" }],
+          isError: true,
+        };
+      }
+      if (!input.origin) {
+        return {
+          content: [{ type: "text", text: "INVALID_INPUT: origin is required" }],
+          isError: true,
+        };
+      }
+      const changed = runtime.consent.revoke(input.origin, input.tool);
+      if (changed) runtime.events.publish({ type: "consent.updated" });
+      return jsonText({
+        changed,
+        origins: runtime.consent.list(),
+      });
+    },
+
+    async restoreConsent(input: { origin?: string; tool?: string }) {
+      if (!runtime.consent.enabled) {
+        return {
+          content: [{ type: "text", text: "INVALID_INPUT: consent is disabled" }],
+          isError: true,
+        };
+      }
+      if (!input.origin) {
+        return {
+          content: [{ type: "text", text: "INVALID_INPUT: origin is required" }],
+          isError: true,
+        };
+      }
+      const changed = runtime.consent.restore(input.origin, input.tool);
+      if (changed) runtime.events.publish({ type: "consent.updated" });
+      return jsonText({
+        changed,
+        origins: runtime.consent.list(),
+      });
     },
   };
 }

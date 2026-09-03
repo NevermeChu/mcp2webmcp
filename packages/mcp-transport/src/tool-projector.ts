@@ -77,7 +77,14 @@ export class ToolProjector {
       }
       const source = this.runtime.sources.get(tool.identity.adapterId, tool.sourceId);
       if (!source || source.state !== "connected") continue;
-      if (!allowed.has(source.origin)) {
+      if (allowed.size > 0 && !allowed.has(source.origin)) {
+        omitted += 1;
+        continue;
+      }
+      if (
+        this.runtime.consent.enabled &&
+        !this.runtime.consent.allows(source.origin, tool.identity.originalName)
+      ) {
         omitted += 1;
         continue;
       }

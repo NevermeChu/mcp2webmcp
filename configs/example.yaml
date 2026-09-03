@@ -36,6 +36,11 @@ policy:
         tool: "delete_*"
       action: confirm
 
+consent:
+  enabled: true
+  autoAdmit: true
+  path: "~/.mcp2webmcp/consent.json"
+
 audit:
   enabled: true
   path: "~/.mcp2webmcp/logs/audit.jsonl"

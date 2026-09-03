@@ -20,6 +20,7 @@ export type RuntimeEventBody =
       runtimeId: string;
       sourceId: string;
       sourceGeneration: number;
-    };
+    }
+  | { type: "consent.updated" };
 
 export type RuntimeEvent = RuntimeEventMeta & RuntimeEventBody;

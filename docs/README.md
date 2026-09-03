@@ -8,8 +8,9 @@
 | [develop.md](develop.md) | 测试与配置 |
 | [adr/0000-mcpb-integration-mode.md](adr/0000-mcpb-integration-mode.md) | 为何包装 MCP-B `RelayBridgeServer` |
 | [adr/0008-extension-adapter-loopback.md](adr/0008-extension-adapter-loopback.md) | 扩展 loopback，扩展不是 MCP server |
+| [adr/0009-extension-webmcp-runtime-polyfill.md](adr/0009-extension-webmcp-runtime-polyfill.md) | 扩展 MAIN world 补一份可删除的页面 WebMCP runtime |
 | [spikes/0001-mcpb-integration.md](spikes/0001-mcpb-integration.md) | 历史：Phase -1 真实链路记录 |
 
 一次性 spike 源码在 `spikes/0001-mcpb-integration`。
 
-实现规格（阶段、验收清单、Coding Agent 指令）只保留在本地 `docs/local/`，不入库。
+实现规格（阶段、验收清单、Coding Agent 指令）只保留在本地 `docs/local/`，不入库。会话问题笔记 `docs/PROBLEMS.md` 同样不入库。

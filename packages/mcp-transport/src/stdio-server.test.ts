@@ -91,6 +91,46 @@ describe("MCP stdio server with FakeBrowserAdapter", () => {
     expect(JSON.stringify(result.content)).toContain("ping");
   });
 
+  it("auto-admits a tool then omits it after revoke", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp2webmcp-mcp-"));
+    const config = testConfig({
+      audit: { path: join(dir, "audit.jsonl") },
+      consent: { enabled: true, autoAdmit: true, path: join(dir, "consent.json") },
+      policy: { default: "deny", rules: [] },
+    });
+    const runtime = createRuntime(config);
+    const adapter = new FakeBrowserAdapter("fake-1");
+    await runtime.attach(adapter);
+    adapter.connectSource(testSource({ adapterId: "fake-1" }));
+    adapter.registerTool("tab-18", discoveredTool("echo"));
+    const mcp = new McpStdioServer(runtime, config);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "mcp2webmcp-test-client", version: "0.0.0" });
+    await Promise.all([client.connect(clientTransport), mcp.connect(serverTransport)]);
+    sessions.push({ client, mcp });
+
+    const before = await client.listTools();
+    const echo = before.tools.find((tool) => tool.name.includes("echo"));
+    expect(echo?.name).toBeTruthy();
+    const ok = await client.callTool({ name: echo?.name ?? "", arguments: { message: "hi" } });
+    expect(ok.isError).not.toBe(true);
+
+    await client.callTool({
+      name: "webmcp_revoke_consent",
+      arguments: { origin: "https://knowmesh.app", tool: "echo" },
+    });
+    await waitFor(() => true);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const after = await client.listTools({ cacheMode: "refresh" } as never);
+    expect(after.tools.some((tool) => tool.name.includes("echo"))).toBe(false);
+    const denied = await client.callTool({
+      name: "webmcp_call_tool",
+      arguments: { mcpName: echo?.name, arguments: { message: "hi" } },
+    });
+    expect(denied.isError).toBe(true);
+    expect(JSON.stringify(denied.content)).toContain("POLICY_DENIED");
+  });
+
   it("notifies the client when a dynamic tool is added", async () => {
     const { client, adapter } = await boot("echo");
     const notifications: string[] = [];

@@ -13,7 +13,9 @@ chrome.runtime.sendMessage({ type: "status" }, (status) => {
   tabsEl.replaceChildren();
   for (const tab of status.tabs ?? []) {
     const item = document.createElement("li");
-    const runtime = tab.runtimePresent ? `${tab.toolCount} tools` : tab.runtimeError || "no-webmcp-runtime";
+    const runtime = tab.runtimePresent
+      ? `${tab.toolCount} tools`
+      : tab.runtimeError || "no-webmcp-runtime";
     item.textContent = `${tab.origin} — ${runtime}`;
     tabsEl.append(item);
   }

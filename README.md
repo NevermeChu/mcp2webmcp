@@ -31,21 +31,22 @@ pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
 
 ## 浏览器扩展（无 embed）
 
-页面只 `registerTool`。扩展只做发现与搬运，**不是** MCP server；客户端只连 stdio Gateway。
+页面只 `registerTool`。Chrome 尚未提供 `document.modelContext` 时，由扩展 MAIN world 补一份可删除的页面 runtime（[ADR 0009](docs/adr/0009-extension-webmcp-runtime-polyfill.md)）。扩展只做发现与搬运，**不是** MCP server；客户端只连 stdio Gateway。
 
 1. 加载未打包扩展：`chrome://extensions` / `edge://extensions` → `apps/extension`。
-2. 启动夹具（origin 必须与 `configs/extension-demo.yaml` 一致）：
+2. 改过 Gateway 配置或 TypeScript 后先 `pnpm build`，再重载 Cursor 里的 MCP。
+3. 夹具（可选）：
 
 ```powershell
 $env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18081"
 pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
 ```
 
-打开 [http://127.0.0.1:18081](http://127.0.0.1:18081)。
+打开 [http://127.0.0.1:18081](http://127.0.0.1:18081)，或打开任何会 `registerTool` 的业务页（如 KnowMesh）。
 
-3. 在 MCP 配置里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），不要改掉已有的 `mcp2webmcp-demo`。Gateway 监听 `127.0.0.1:9334`。
+4. 在 MCP 配置里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），不要改掉已有的 `mcp2webmcp-demo`。Gateway 监听 `127.0.0.1:9334`。
 
-同样调用 echo，应返回 `echo:hello`。
+`configs/extension-demo.yaml` 默认 `allowedOrigins: []`：扩展发现到的工具会写入本地同意账本，MCP 可直接调用。不想暴露时用 `webmcp_revoke_consent`。yaml 里若仍列出 origin，则必须与地址栏逐字一致（`localhost` ≠ `127.0.0.1`）。
 
 ## 文档
 
@@ -56,6 +57,7 @@ pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
 | [docs/extension-loopback-protocol.md](docs/extension-loopback-protocol.md) | 扩展 ↔ Gateway 协议 |
 | [docs/develop.md](docs/develop.md) | 测试与配置 |
 | [docs/README.md](docs/README.md) | 文档索引 |
+| [docs/adr/0009-extension-webmcp-runtime-polyfill.md](docs/adr/0009-extension-webmcp-runtime-polyfill.md) | 扩展页面 WebMCP runtime polyfill |
 
 ## License
 

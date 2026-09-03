@@ -63,7 +63,7 @@ v0.1 私有 JSON 协议：Chrome/Edge MV3 扩展把页面 WebMCP 工具搬到本
 }
 ```
 
-Gateway 对不在 yaml `allowedOrigins` 里的 origin **不投影**（不发 `source.connected`）。
+Gateway 对 yaml `allowedOrigins` 非空时，名单外的 origin **不投影**。名单为空且 consent 开启时，扩展发现的 origin 都会进入 Core，由同意账本决定能否调用。
 
 ### `source.remove`（扩展 → Gateway）
 
@@ -146,6 +146,6 @@ MV3 service worker 会睡。双方均可发 `ping`；对端回相同 `id` 的 `p
 
 ## 扩展侧约束
 
-- 隔离世界看不到 `document.modelContext`：MAIN world 注入钩住 `registerTool` / unregister。
-- 站点**必须**自己有 WebMCP runtime。扩展不是第二个 polyfill；缺 runtime 时明确失败（popup / 快照 `runtimeError`），不要偷偷 `registerTool`。
+- 隔离世界看不到 `document.modelContext`：MAIN world 先注入可删除的 runtime polyfill（若尚无 `registerTool`），再由 `content-main.js` 钩住 `registerTool` / 可选的 unregister。
+- 站点只 `registerTool`。有 runtime 无工具时快照 `runtimePresent: true` 且 `tools: []`（popup `0 tools`）。`no-webmcp-runtime` 仅在非 http(s)、非 secure、或挂载失败时出现。见 [ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)。
 - 不在扩展里做 allowlist / namespace / audit。那些只在 Gateway yaml 与 Core。

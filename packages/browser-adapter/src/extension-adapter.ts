@@ -17,10 +17,11 @@ import {
   type ExtensionToolSnapshot,
 } from "./extension-protocol.js";
 import {
-  assertExplicitOrigins,
+  assertOriginPolicy,
   assertLoopbackHost,
   isLoopbackAddress,
   normalizeLoopbackHost,
+  originIsAllowed,
 } from "./mcpb-safety.js";
 
 export interface ExtensionAdapterOptions {
@@ -63,7 +64,7 @@ export class ExtensionAdapter implements BrowserAdapter {
   private readonly pingWaiters = new Map<string, () => void>();
 
   constructor(options: ExtensionAdapterOptions) {
-    assertExplicitOrigins(options.allowedOrigins);
+    assertOriginPolicy(options.allowedOrigins);
     const host = normalizeLoopbackHost(options.host ?? "127.0.0.1");
     assertLoopbackHost(host);
     this.adapterId = options.adapterId ?? "ext-1";
@@ -281,7 +282,7 @@ export class ExtensionAdapter implements BrowserAdapter {
   }
 
   private upsertSource(incoming: Extract<ExtensionClientMessage, { type: "source.upsert" }>): void {
-    if (!this.allowedOrigins.has(incoming.origin)) {
+    if (!originIsAllowed([...this.allowedOrigins], incoming.origin)) {
       this.removeSource(incoming.sourceId);
       return;
     }
@@ -341,7 +342,7 @@ export class ExtensionAdapter implements BrowserAdapter {
   private replaceTools(sourceId: string, incoming: ExtensionToolSnapshot[]): void {
     const source = this.sources.get(sourceId);
     if (!source || source.state !== "connected") return;
-    if (!this.allowedOrigins.has(source.origin)) return;
+    if (!originIsAllowed([...this.allowedOrigins], source.origin)) return;
     const bucket = this.tools.get(sourceId) ?? new Map();
     const nextNames = new Set(incoming.map((tool) => tool.originalName));
     for (const originalName of [...bucket.keys()]) {

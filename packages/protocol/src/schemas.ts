@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defaultResourceLimits } from "./config.js";
+import { defaultConsentConfig } from "./consent.js";
 
 export const adapterTypeSchema = z.enum(["extension", "cdp", "playwright", "mcpb", "fake"]);
 
@@ -111,6 +112,14 @@ export const policyConfigSchema = z.object({
   rules: z.array(policyRuleSchema).default([]),
 });
 
+export const consentConfigSchema = z
+  .object({
+    enabled: z.boolean().default(defaultConsentConfig.enabled),
+    autoAdmit: z.boolean().default(defaultConsentConfig.autoAdmit),
+    path: z.string().min(1).default(defaultConsentConfig.path),
+  })
+  .default(defaultConsentConfig);
+
 export const resourceLimitsSchema = z.object({
   maxToolsPerSource: z.number().int().positive().default(defaultResourceLimits.maxToolsPerSource),
   maxToolsTotal: z.number().int().positive().default(defaultResourceLimits.maxToolsTotal),
@@ -160,6 +169,7 @@ export const runtimeConfigSchema = z.object({
       .optional(),
   }),
   policy: policyConfigSchema,
+  consent: consentConfigSchema,
   audit: z.object({
     enabled: z.boolean().default(true),
     path: z.string().min(1),
@@ -167,18 +177,20 @@ export const runtimeConfigSchema = z.object({
   }),
   limits: resourceLimitsSchema.default(defaultResourceLimits),
 }).superRefine((config, ctx) => {
-  if (config.browser.adapter !== "mcpb" && config.browser.adapter !== "extension") return;
-  if (config.browser.allowedOrigins.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `${config.browser.adapter} adapter requires an explicit allowedOrigins list`,
-      path: ["browser", "allowedOrigins"],
-    });
-  }
   if (config.browser.allowedOrigins.includes("*")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `allowedOrigins must not include * for production ${config.browser.adapter}`,
+      path: ["browser", "allowedOrigins"],
+    });
+  }
+  const adapter = config.browser.adapter;
+  if (adapter !== "mcpb" && adapter !== "extension") return;
+  if (adapter === "extension" && config.consent.enabled) return;
+  if (config.browser.allowedOrigins.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${adapter} adapter requires an explicit allowedOrigins list when consent is disabled`,
       path: ["browser", "allowedOrigins"],
     });
   }

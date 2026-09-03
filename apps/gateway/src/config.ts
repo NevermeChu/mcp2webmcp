@@ -30,6 +30,7 @@ export function loadConfig(argv = process.argv.slice(2)): RuntimeConfig {
       .filter(Boolean);
   }
   parsed.audit.path = expandHome(parsed.audit.path);
+  parsed.consent.path = expandHome(parsed.consent.path);
   if (parsed.browser.mcpb?.persistPath) {
     parsed.browser.mcpb.persistPath = expandHome(parsed.browser.mcpb.persistPath);
   }
@@ -62,6 +63,10 @@ policy:
         origin: "https://knowmesh.app"
         tool: "echo"
       action: allow
+consent:
+  enabled: true
+  autoAdmit: true
+  path: "~/.mcp2webmcp/consent.json"
 audit:
   enabled: true
   path: "~/.mcp2webmcp/logs/audit.jsonl"

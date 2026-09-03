@@ -11,48 +11,46 @@
   <body>
     <h1>extension-demo — no MCP-B embed</h1>
     <p>
-      This page only implements a tiny in-page <code>registerTool</code> (site-owned WebMCP).
-      It does <strong>not</strong> load <code>embed.js</code> or <code>@mcp-b/global</code>.
-      The MV3 extension must discover the tool.
+      This page only calls <code>document.modelContext.registerTool</code>.
+      It does <strong>not</strong> create a host, and does not load <code>embed.js</code> or <code>@mcp-b/global</code>.
+      Chrome without native WebMCP gets a host from the MV3 extension polyfill.
     </p>
     <p>Origin: <code id="origin"></code></p>
     <p>Status: <span id="status">registering</span></p>
     <script>
       document.getElementById("origin").textContent = location.origin;
       const statusEl = document.getElementById("status");
-      const registered = new Map();
+      const abortController = new AbortController();
+      window.__abortEcho = () => abortController.abort();
 
-      const modelContext = {
-        async registerTool(def) {
-          registered.set(def.name, def);
-        },
-        async unregisterTool(name) {
-          registered.delete(name);
-        },
-      };
-      document.modelContext = modelContext;
-      navigator.modelContext = modelContext;
-
-      modelContext
-        .registerTool({
-          name: "echo",
-          description: "Echo the provided message",
-          inputSchema: {
-            type: "object",
-            properties: { message: { type: "string" } },
-            required: ["message"],
-          },
-          annotations: { readOnlyHint: true, idempotentHint: true },
-          execute: async ({ message }) => ({
-            content: [{ type: "text", text: `echo:${message}` }],
-          }),
-        })
-        .then(() => {
-          statusEl.textContent = "ready";
-        })
-        .catch((error) => {
-          statusEl.textContent = `register-failed:${error}`;
-        });
+      const ctx = document.modelContext || navigator.modelContext;
+      if (!ctx || typeof ctx.registerTool !== "function") {
+        statusEl.textContent = "no-webmcp-runtime";
+      } else {
+        ctx
+          .registerTool(
+            {
+              name: "echo",
+              description: "Echo the provided message",
+              inputSchema: {
+                type: "object",
+                properties: { message: { type: "string" } },
+                required: ["message"],
+              },
+              annotations: { readOnlyHint: true, idempotentHint: true },
+              execute: async ({ message }) => ({
+                content: [{ type: "text", text: `echo:${message}` }],
+              }),
+            },
+            { signal: abortController.signal },
+          )
+          .then(() => {
+            statusEl.textContent = "ready";
+          })
+          .catch((error) => {
+            statusEl.textContent = `register-failed:${error}`;
+          });
+      }
     </script>
   </body>
 </html>

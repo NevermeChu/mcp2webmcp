@@ -3,6 +3,11 @@ import { AuditLogger } from "./audit/audit-logger.js";
 import { RuntimeEventBus } from "./events/runtime-event-bus.js";
 import { LifecycleManager } from "./lifecycle/lifecycle-manager.js";
 import { ConfirmationManager } from "./policy/confirmation-manager.js";
+import {
+  DisabledConsentStore,
+  FileConsentStore,
+  type ConsentStore,
+} from "./policy/consent-store.js";
 import { PolicyEngine } from "./policy/policy-engine.js";
 import { InMemoryAdapterRegistry } from "./registry/adapter-registry.js";
 import { SourceRegistry } from "./registry/source-registry.js";
@@ -21,6 +26,7 @@ export interface Runtime {
   confirmation: ConfirmationManager;
   audit: AuditLogger;
   router: ToolRouter;
+  consent: ConsentStore;
   limits: ResourceLimits;
   attach(adapter: BrowserAdapter): Promise<void>;
 }
@@ -31,8 +37,14 @@ export function createRuntime(config: RuntimeConfig): Runtime {
   const adapters = new InMemoryAdapterRegistry();
   const events = new RuntimeEventBus();
   const names = new NamespaceResolver();
-  const lifecycle = new LifecycleManager(sources, tools, events, names, config.limits);
-  const policy = new PolicyEngine(config.policy);
+  const consent: ConsentStore = config.consent.enabled
+    ? new FileConsentStore(config.consent.path, {
+        enabled: config.consent.enabled,
+        autoAdmit: config.consent.autoAdmit,
+      })
+    : new DisabledConsentStore();
+  const lifecycle = new LifecycleManager(sources, tools, events, names, config.limits, consent);
+  const policy = new PolicyEngine(config.policy, consent);
   const confirmation = new ConfirmationManager();
   const audit = new AuditLogger(config.audit);
   const router = new ToolRouter({
@@ -57,6 +69,7 @@ export function createRuntime(config: RuntimeConfig): Runtime {
     confirmation,
     audit,
     router,
+    consent,
     limits: config.limits,
     async attach(adapter: BrowserAdapter) {
       adapters.register(adapter);

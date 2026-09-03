@@ -26,6 +26,8 @@ export type {
   PolicyRuleMatch,
 } from "./policy.js";
 export type { AuditConfig, AuditRecord } from "./audit.js";
+export { defaultConsentConfig } from "./consent.js";
+export type { ConsentConfig, ConsentOriginRecord, ConsentToolRecord } from "./consent.js";
 export {
   DEFAULT_INVOCATION_DEADLINE_MS,
   defaultResourceLimits,
@@ -36,6 +38,7 @@ export {
   adapterTypeSchema,
   browserSourceSchema,
   invokeOutcomeSchema,
+  consentConfigSchema,
   policyConfigSchema,
   policyRuleSchema,
   resourceLimitsSchema,

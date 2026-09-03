@@ -22,7 +22,7 @@
     },
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["content-main.js"],
+      "js": ["webmcp-runtime-polyfill.js", "content-main.js"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": false

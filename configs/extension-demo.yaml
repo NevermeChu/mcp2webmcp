@@ -1,6 +1,7 @@
 # WebMCP Gateway extension demo (no MCP-B embed).
 # Load the unpacked MV3 extension from apps/extension.
-# Fixture origin must match allowedOrigins exactly, including the port.
+# Empty allowedOrigins: every origin the extension discovers is admitted.
+# Users revoke with webmcp_revoke_consent (origin and optional tool name).
 # 9334 is the extension loopback; do not use 9333 (MCP-B relay).
 
 runtime:
@@ -13,8 +14,7 @@ mcp:
 
 browser:
   adapter: extension
-  allowedOrigins:
-    - "http://127.0.0.1:18081"
+  allowedOrigins: []
   extension:
     host: "127.0.0.1"
     port: 9334
@@ -23,9 +23,13 @@ policy:
   default: deny
   rules:
     - match:
-        origin: "http://127.0.0.1:18081"
-        tool: "echo"
-      action: allow
+        destructive: true
+      action: confirm
+
+consent:
+  enabled: true
+  autoAdmit: true
+  path: "~/.mcp2webmcp/extension-demo-consent.json"
 
 audit:
   enabled: true

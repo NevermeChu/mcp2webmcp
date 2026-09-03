@@ -10,6 +10,7 @@ import type { RuntimeEventBus } from "../events/runtime-event-bus.js";
 import type { SourceRegistry } from "../registry/source-registry.js";
 import type { ToolRegistry } from "../registry/tool-registry.js";
 import type { NamespaceResolver } from "../routing/namespace-resolver.js";
+import type { ConsentStore } from "../policy/consent-store.js";
 
 interface SourceCursor {
   generation: number;
@@ -26,6 +27,7 @@ export class LifecycleManager {
     private readonly events: RuntimeEventBus,
     private readonly names: NamespaceResolver,
     private readonly limits: ResourceLimits,
+    private readonly consent?: ConsentStore,
   ) {}
 
   async attach(adapter: BrowserAdapter): Promise<void> {
@@ -165,6 +167,9 @@ export class LifecycleManager {
       generation: incoming.sourceGeneration,
       revision,
     });
+    if (this.consent?.admit(source.origin, identity.originalName)) {
+      this.events.publish({ type: "consent.updated" });
+    }
     this.events.publish({
       type: previous ? "tool.updated" : "tool.added",
       tool,

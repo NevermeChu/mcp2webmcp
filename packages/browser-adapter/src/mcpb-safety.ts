@@ -7,12 +7,21 @@ export function assertLoopbackHost(host: string): void {
 }
 
 export function assertExplicitOrigins(origins: string[]): void {
+  assertOriginPolicy(origins);
   if (origins.length === 0) {
     throw new Error("adapter requires an explicit allowedOrigins list");
   }
+}
+
+export function assertOriginPolicy(origins: string[]): void {
   if (origins.some((origin) => origin === "*")) {
     throw new Error("allowedOrigins must not include *");
   }
+}
+
+export function originIsAllowed(allowedOrigins: readonly string[], origin: string): boolean {
+  if (allowedOrigins.length === 0) return true;
+  return allowedOrigins.includes(origin);
 }
 
 export function normalizeLoopbackHost(host: string): string {

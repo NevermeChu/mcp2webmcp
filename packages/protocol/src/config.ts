@@ -1,4 +1,5 @@
 import type { AuditConfig } from "./audit.js";
+import type { ConsentConfig } from "./consent.js";
 import type { PolicyConfig } from "./policy.js";
 
 export const TOOL_INPUT_JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema";
@@ -32,6 +33,7 @@ export interface RuntimeConfig {
     extension?: ExtensionAdapterConfig;
   };
   policy: PolicyConfig;
+  consent: ConsentConfig;
   audit: AuditConfig;
   limits: ResourceLimits;
 }

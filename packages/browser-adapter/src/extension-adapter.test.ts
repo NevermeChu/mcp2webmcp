@@ -193,6 +193,25 @@ describe("ExtensionAdapter", () => {
     expect(await adapter.listTools("tab:9")).toHaveLength(0);
   });
 
+  it("projects any origin when allowedOrigins is empty", async () => {
+    const { adapter, client } = await boot([]);
+    client.send({
+      type: "source.upsert",
+      sourceId: "tab:9",
+      tabId: "9",
+      origin: "http://localhost:18081",
+      url: "http://localhost:18081/",
+      reason: "connect",
+    });
+    client.send({
+      type: "tools.replace",
+      sourceId: "tab:9",
+      tools: [{ originalName: "echo", inputSchema: { type: "object", properties: {} } }],
+    });
+    await waitFor(async () => (await adapter.listTools("tab:9")).length === 1);
+    expect((await adapter.listSources())[0]?.origin).toBe("http://localhost:18081");
+  });
+
   it("emits source.disconnected when the tab is removed", async () => {
     const { adapter, client } = await boot();
     const events: string[] = [];
@@ -267,6 +286,7 @@ describe("ExtensionAdapter", () => {
 
   it("refuses to construct with wildcard origins or a non-loopback host", () => {
     expect(() => new ExtensionAdapter({ allowedOrigins: ["*"] })).toThrow(/\*/);
+    expect(() => new ExtensionAdapter({ allowedOrigins: [] })).not.toThrow();
     expect(
       () =>
         new ExtensionAdapter({

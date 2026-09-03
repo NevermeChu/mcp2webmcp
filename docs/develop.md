@@ -21,12 +21,11 @@ $env:MCP2WEBMCP_FAKE_ECHO = "1"
 node apps/gateway/dist/main.js
 ```
 
-环境变量：`MCP2WEBMCP_CONFIG`、`MCP2WEBMCP_ALLOWED_ORIGINS`、`MCP2WEBMCP_LOG_LEVEL`（日志只打 stderr）。
+环境变量：`MCP2WEBMCP_CONFIG`、`MCP2WEBMCP_ALLOWED_ORIGINS`、`MCP2WEBMCP_LOG_LEVEL`（日志只打 stderr）。改 `packages/protocol` 或 yaml schema 后必须 `pnpm build`，Cursor 读的是 `apps/gateway/dist`。
 
 | 文件 | 用途 |
 | --- | --- |
 | `configs/demo.yaml` | embed demo（`:18080` / `9333`） |
-| `configs/extension-demo.yaml` | 扩展 demo（`:18081` / `9334`） |
-| `configs/example.yaml` | 业务站骨架，需改 origin / 工具 |
-| `configs/mcp-client.example.json` | embed 客户端模板 |
-| `configs/mcp-client.extension.example.json` | 扩展客户端模板 |
+| `configs/extension-demo.yaml` | 扩展 demo（`:18081` / `9334`）；空 `allowedOrigins` + 同意账本 |
+| `configs/example.yaml` | 业务站骨架（mcpb 仍要 origin） |
+| `~/.mcp2webmcp/*-consent.json` | 发现后自动放行的 origin/工具；撤销不入库 |
