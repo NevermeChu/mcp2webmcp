@@ -7,6 +7,7 @@
 runtime:
   name: mcp2webmcp-extension-demo
   logLevel: info
+  # Always-on JSONL at ~/.mcp2webmcp/logs/mcp2webmcp-extension-demo.jsonl unless logPath / MCP2WEBMCP_LOG_PATH is set.
 
 mcp:
   stdio:

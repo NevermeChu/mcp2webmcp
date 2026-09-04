@@ -41,6 +41,18 @@ describe("ToolRegistry", () => {
     expect(registry.list()).toHaveLength(0);
   });
 
+  it("keeps a single row when the same tool is re-registered after a generation bump", () => {
+    const registry = new ToolRegistry();
+    const first = tool(testSource({ generation: 1 }));
+    const second = tool(testSource({ generation: 2 }));
+    expect(first.identity.mcpName).toBe(second.identity.mcpName);
+    expect(first.identity.runtimeId).toBe(second.identity.runtimeId);
+    registry.register(first);
+    registry.register(second);
+    expect(registry.list()).toHaveLength(1);
+    expect(registry.getByMcpName(first.identity.mcpName)?.sourceGeneration).toBe(2);
+  });
+
   it("looks up by MCP name", () => {
     const registry = new ToolRegistry();
     const registered = tool();

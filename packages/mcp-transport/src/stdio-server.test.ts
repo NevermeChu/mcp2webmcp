@@ -42,6 +42,7 @@ describe("MCP stdio server with FakeBrowserAdapter", () => {
     expect(names).toContain("webmcp_list_sources");
     expect(names).toContain("webmcp_list_tools");
     expect(names).toContain("webmcp_call_tool");
+    expect(names).toContain("webmcp_recent_logs");
     const echo = tools.find((tool) => tool.name !== undefined && !tool.name.startsWith("webmcp_"));
     expect(echo?.name).toMatch(/echo/);
 
@@ -55,6 +56,10 @@ describe("MCP stdio server with FakeBrowserAdapter", () => {
 
     const listed = await client.callTool({ name: "webmcp_list_sources", arguments: {} });
     expect(JSON.stringify(listed.content)).toContain("https://knowmesh.app");
+
+    const logs = await client.callTool({ name: "webmcp_recent_logs", arguments: { limit: 40 } });
+    const logText = JSON.stringify(logs.content);
+    expect(logText).toMatch(/source\.added|tool\.added|projector\.sync/);
   });
 
   it("does not project tools from origins off the allowlist", async () => {
@@ -120,7 +125,7 @@ describe("MCP stdio server with FakeBrowserAdapter", () => {
       arguments: { origin: "https://knowmesh.app", tool: "echo" },
     });
     await waitFor(() => true);
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const after = await client.listTools({ cacheMode: "refresh" } as never);
     expect(after.tools.some((tool) => tool.name.includes("echo"))).toBe(false);
     const denied = await client.callTool({
@@ -129,6 +134,20 @@ describe("MCP stdio server with FakeBrowserAdapter", () => {
     });
     expect(denied.isError).toBe(true);
     expect(JSON.stringify(denied.content)).toContain("POLICY_DENIED");
+  });
+
+  it("keeps the projected mcpName across a source generation bump", async () => {
+    const { client, adapter } = await boot("echo");
+    const before = await client.listTools();
+    const echoName = before.tools.find((tool) => tool.name?.includes("echo"))?.name;
+    expect(echoName).toBeTruthy();
+    adapter.reloadSource("tab-18");
+    adapter.registerTool("tab-18", discoveredTool("echo"));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const after = await client.listTools({ cacheMode: "refresh" } as never);
+    expect(after.tools.find((tool) => tool.name?.includes("echo"))?.name).toBe(echoName);
+    const result = await client.callTool({ name: echoName ?? "", arguments: { message: "again" } });
+    expect(result.isError).not.toBe(true);
   });
 
   it("notifies the client when a dynamic tool is added", async () => {

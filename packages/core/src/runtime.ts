@@ -1,6 +1,12 @@
-import type { BrowserAdapter, ResourceLimits, RuntimeConfig } from "@mcp2webmcp/protocol";
+import type {
+  BrowserAdapter,
+  ResourceLimits,
+  RuntimeConfig,
+  RuntimeEvent,
+} from "@mcp2webmcp/protocol";
 import { AuditLogger } from "./audit/audit-logger.js";
 import { RuntimeEventBus } from "./events/runtime-event-bus.js";
+import { RuntimeLogger } from "./log/runtime-logger.js";
 import { LifecycleManager } from "./lifecycle/lifecycle-manager.js";
 import { ConfirmationManager } from "./policy/confirmation-manager.js";
 import {
@@ -25,6 +31,7 @@ export interface Runtime {
   policy: PolicyEngine;
   confirmation: ConfirmationManager;
   audit: AuditLogger;
+  log: RuntimeLogger;
   router: ToolRouter;
   consent: ConsentStore;
   limits: ResourceLimits;
@@ -47,6 +54,13 @@ export function createRuntime(config: RuntimeConfig): Runtime {
   const policy = new PolicyEngine(config.policy, consent);
   const confirmation = new ConfirmationManager();
   const audit = new AuditLogger(config.audit);
+  const log = new RuntimeLogger({
+    path: config.runtime.logPath,
+    logLevel: config.runtime.logLevel,
+    maxBytes: config.runtime.logMaxBytes,
+    stderr: Boolean(config.runtime.logPath),
+  });
+  events.subscribe((event) => logRuntimeEvent(log, event));
   const router = new ToolRouter({
     sources,
     tools,
@@ -68,13 +82,61 @@ export function createRuntime(config: RuntimeConfig): Runtime {
     policy,
     confirmation,
     audit,
+    log,
     router,
     consent,
     limits: config.limits,
     async attach(adapter: BrowserAdapter) {
       adapters.register(adapter);
       await adapter.start();
+      log.info("gateway", "adapter.attached", { adapterId: adapter.adapterId, type: adapter.type });
       await lifecycle.attach(adapter);
     },
   };
+}
+
+function logRuntimeEvent(log: RuntimeLogger, event: RuntimeEvent): void {
+  if (event.type === "source.added") {
+    log.info("gateway", "source.added", {
+      adapterId: event.source.adapterId,
+      sourceId: event.source.sourceId,
+      origin: event.source.origin,
+      generation: event.source.generation,
+    });
+    return;
+  }
+  if (event.type === "source.removed") {
+    log.info("gateway", "source.removed", {
+      sourceId: event.sourceId,
+      sourceGeneration: event.sourceGeneration,
+    });
+    return;
+  }
+  if (event.type === "tool.added") {
+    log.info("gateway", "tool.added", {
+      mcpName: event.tool.identity.mcpName,
+      originalName: event.tool.identity.originalName,
+      sourceId: event.tool.sourceId,
+      sourceGeneration: event.tool.sourceGeneration,
+    });
+    return;
+  }
+  if (event.type === "tool.updated") {
+    log.debug("gateway", "tool.updated", {
+      mcpName: event.tool.identity.mcpName,
+      sourceGeneration: event.tool.sourceGeneration,
+    });
+    return;
+  }
+  if (event.type === "tool.removed") {
+    log.info("gateway", "tool.removed", {
+      runtimeId: event.runtimeId,
+      sourceId: event.sourceId,
+      sourceGeneration: event.sourceGeneration,
+    });
+    return;
+  }
+  if (event.type === "consent.updated") {
+    log.info("gateway", "consent.updated");
+  }
 }

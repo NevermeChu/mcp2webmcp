@@ -25,3 +25,20 @@ chrome.runtime.sendMessage({ type: "status" }, (status) => {
     tabsEl.append(item);
   }
 });
+
+document.getElementById("register-tool")?.addEventListener("click", () => {
+  const errorEl = document.getElementById("pick-error");
+  chrome.runtime.sendMessage({ type: "pick.start" }, (result) => {
+    if (chrome.runtime.lastError || !result?.ok) {
+      if (errorEl) {
+        errorEl.hidden = false;
+        errorEl.textContent =
+          result?.error ||
+          chrome.runtime.lastError?.message ||
+          "could not start picker";
+      }
+      return;
+    }
+    window.close();
+  });
+});

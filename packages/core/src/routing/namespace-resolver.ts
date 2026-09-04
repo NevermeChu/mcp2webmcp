@@ -6,10 +6,7 @@ const MCP_NAME_MAX = 128;
 export class NamespaceResolver {
   resolve(source: BrowserSource, originalName: string): ToolIdentity {
     const digest = createHash("sha256")
-      .update(
-        `${source.adapterId}/${source.sourceId}/${source.generation}/${originalName}`,
-        "utf8",
-      )
+      .update(`${source.adapterId}/${source.sourceId}/${originalName}`, "utf8")
       .digest("hex");
     return {
       adapterId: source.adapterId,

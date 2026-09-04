@@ -29,6 +29,9 @@ export function loadConfig(argv = process.argv.slice(2)): RuntimeConfig {
       .map((item) => item.trim())
       .filter(Boolean);
   }
+  const logPath = process.env.MCP2WEBMCP_LOG_PATH || parsed.runtime.logPath;
+  const safeName = parsed.runtime.name.replace(/[^a-zA-Z0-9._-]+/g, "_") || "mcp2webmcp";
+  parsed.runtime.logPath = expandHome(logPath || `~/.mcp2webmcp/logs/${safeName}.jsonl`);
   parsed.audit.path = expandHome(parsed.audit.path);
   parsed.consent.path = expandHome(parsed.consent.path);
   if (parsed.browser.mcpb?.persistPath) {

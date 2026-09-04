@@ -11,7 +11,7 @@
 
 默认 Gateway 仍可以是 `adapter: mcpb`。扩展 loopback 默认 `127.0.0.1:9334`，不要占用 MCP-B 的 `9333`。
 
-两条可以写在同一份 `.cursor/mcp.json` 里：**不要**用 extension yaml 覆盖旧的 `mcp2webmcp-demo` 条目。`mcp2webmcp-demo` 必须指向 `configs/demo.yaml`（9333）；`mcp2webmcp-extension-demo` 指向 `configs/extension-demo.yaml`（9334）。两条都指向 extension yaml 会 `EADDRINUSE`。ExtensionAdapter 没有 MCP-B 那种「发现已有 relay 再切 client」的行为。
+两条可以写在同一份 `.cursor/mcp.json` 里：**不要**用 extension yaml 覆盖旧的 `mcp2webmcp-demo` 条目。`mcp2webmcp-demo` 必须指向 `configs/demo.yaml`（9333）；`mcp2webmcp-extension-demo` 指向 `configs/extension-demo.yaml`（9334）。两条都指向 extension yaml 会 `EADDRINUSE`。ExtensionAdapter 没有 MCP-B 那种「发现已有 relay 再切 client」的行为。Cursor 启用该 MCP 时会自己 `node .../main.js --config .../extension-demo.yaml`；这不是人手终端。Reload 必须让该子进程退出，否则旧进程占着 9334，新进程起不来。
 
 ## 10 分钟 Demo（Windows PowerShell）
 

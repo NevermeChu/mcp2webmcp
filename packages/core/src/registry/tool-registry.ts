@@ -6,6 +6,10 @@ export class ToolRegistry {
   private readonly bySource = new Map<string, Set<string>>();
 
   register(tool: RuntimeTool): void {
+    const ownerOfName = this.byMcpName.get(tool.identity.mcpName);
+    if (ownerOfName && ownerOfName !== tool.identity.runtimeId) {
+      this.unregister(ownerOfName);
+    }
     const existing = this.byRuntimeId.get(tool.identity.runtimeId);
     if (existing && existing.identity.mcpName !== tool.identity.mcpName) {
       this.byMcpName.delete(existing.identity.mcpName);

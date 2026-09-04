@@ -14,5 +14,6 @@ export {
 } from "./policy/consent-store.js";
 export type { ConsentStore } from "./policy/consent-store.js";
 export { AuditLogger } from "./audit/audit-logger.js";
+export { RuntimeLogger } from "./log/runtime-logger.js";
 export { createRuntime } from "./runtime.js";
 export type { Runtime } from "./runtime.js";

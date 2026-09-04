@@ -21,6 +21,8 @@ export interface RuntimeConfig {
   runtime: {
     name: string;
     logLevel: "debug" | "info" | "warn" | "error";
+    logPath?: string;
+    logMaxBytes?: number;
     invocationDeadlineMs: number;
   };
   mcp: {

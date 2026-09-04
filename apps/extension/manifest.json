@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["content-isolated.js"],
+      "js": ["picker-model.js", "content-isolated.js"],
       "run_at": "document_start",
       "all_frames": false
     },

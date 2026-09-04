@@ -24,18 +24,22 @@ WebMCP Gateway（**mcp2webmcp**）从支持 WebMCP 的页面发现工具，经 s
   → Cursor / Claude / Codex
 ```
 
+投影到 MCP 的 `mcpName` 对同一 tab 上的同一页面工具保持稳定（不含页面 generation）。generation 只用于拒绝过期 invoke。详见 [PROBLEMS.md](PROBLEMS.md) 问题 3。
+
 ## 仓库
 
 ```text
 apps/gateway                 stdio Gateway（CLI: mcp2webmcp）
 apps/extension               Chrome/Edge MV3（发现 + 搬运；可删除的页面 runtime 见 ADR 0009）
 packages/protocol            类型与 Zod schema
-packages/core                注册表、命名空间、路由、策略、审计
+packages/core                注册表、命名空间、路由、策略、审计、运行日志
 packages/browser-adapter     FakeBrowserAdapter / McpBAdapter / ExtensionAdapter
 packages/mcp-transport       stdio MCP 与管理工具
 packages/test-fixtures/      演示页
 configs/                     yaml 与 MCP 客户端模板
 ```
+
+调用链上每一跳都会写 JSONL（`hop`: `page` / `extension` / `gateway` / `mcp`）。默认路径 `~/.mcp2webmcp/logs/<runtime.name>.jsonl`。审计 JSONL 仍只记 invoke。
 
 `allowedOrigins` 对 **mcpb** 仍须显式列出。**extension** 在 `consent.enabled` 时可以留空，表示扩展发现的 origin 都会进同意账本。禁止 `*`。默认策略是否认；发现后的工具靠同意账本自动放行，yaml 规则可覆盖（deny / confirm）。`destructiveHint` 仍升为 confirm，无审批通道时 fail-closed。
 

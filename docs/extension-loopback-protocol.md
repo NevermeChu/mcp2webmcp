@@ -144,6 +144,20 @@ MV3 service worker 会睡。双方均可发 `ping`；对端回相同 `id` 的 `p
 { "type": "pong", "id": "p1" }
 ```
 
+### `log`（扩展 → Gateway）
+
+页面 / 扩展把诊断事件推到 Gateway JSONL。不含调用参数、Cookie、Authorization。未知 `type` 会被丢弃并记 `extension.message.dropped`。
+
+```json
+{
+  "type": "log",
+  "hop": "page",
+  "level": "info",
+  "event": "runtime.wrapped",
+  "data": { "toolCount": 1 }
+}
+```
+
 ## 扩展侧约束
 
 - 隔离世界看不到 `document.modelContext`：MAIN world 先注入可删除的 runtime polyfill（若尚无 `registerTool`），再由 `content-main.js` 钩住 `registerTool` / 可选的 unregister。

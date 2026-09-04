@@ -26,6 +26,8 @@ export type {
   PolicyRuleMatch,
 } from "./policy.js";
 export type { AuditConfig, AuditRecord } from "./audit.js";
+export type { LogHop, LogLevel, LogRecord, RuntimeLog } from "./log.js";
+export { LOG_LEVEL_RANK, isLogHop, isLogLevel, sanitizeLogData } from "./log.js";
 export { defaultConsentConfig } from "./consent.js";
 export type { ConsentConfig, ConsentOriginRecord, ConsentToolRecord } from "./consent.js";
 export {

@@ -55,11 +55,13 @@ describe("NamespaceResolver", () => {
     expect(longA.mcpName).not.toBe(longB.mcpName);
   });
 
-  it("changes identity when generation changes", () => {
+  it("keeps mcpName and runtimeId stable across generation", () => {
     const v1 = names.resolve(testSource({ generation: 1 }), "search");
     const v2 = names.resolve(testSource({ generation: 2 }), "search");
-    expect(v1.runtimeId).not.toBe(v2.runtimeId);
-    expect(v1.mcpName).not.toBe(v2.mcpName);
+    expect(v1.mcpName).toBe(v2.mcpName);
+    expect(v1.runtimeId).toBe(v2.runtimeId);
+    expect(v1.sourceGeneration).toBe(1);
+    expect(v2.sourceGeneration).toBe(2);
   });
 
   it("normalizes domains as specified", () => {

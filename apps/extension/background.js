@@ -29,6 +29,8 @@ let pingSeq = 0;
 const tabs = new Map();
 
 let socketGeneration = 0;
+/** @type {Array<Record<string, unknown>>} */
+const pendingLogs = [];
 
 globalThis.mcp2webmcpSetGatewayPort = (port) => {
   const next = Number(port);
@@ -52,8 +54,30 @@ function originFromTabUrl(url) {
 }
 
 function send(message) {
-  if (!socket || socket.readyState !== WebSocket.OPEN || !helloOk) return;
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  if (message.type === "log" && !helloOk) {
+    pendingLogs.push(message);
+    return;
+  }
+  if (!helloOk && message.type !== "hello") return;
   socket.send(JSON.stringify(message));
+}
+
+function gatewayLog(event, data, extra) {
+  send({
+    type: "log",
+    hop: extra?.hop ?? "extension",
+    level: extra?.level ?? "info",
+    event,
+    message: extra?.message,
+    traceId: extra?.traceId,
+    data,
+  });
+}
+
+function flushLogs() {
+  const queued = pendingLogs.splice(0);
+  for (const message of queued) send(message);
 }
 
 function connect() {
@@ -103,7 +127,11 @@ function connect() {
     if (!message || typeof message !== "object") return;
     if (message.type === "helloAck") {
       helloOk = message.protocolVersion === PROTOCOL_VERSION;
-      if (helloOk) replayAll();
+      if (helloOk) {
+        gatewayLog("extension.helloAck", { port: gatewayPort });
+        flushLogs();
+        replayAll();
+      }
       return;
     }
     if (!helloOk) return;
@@ -205,6 +233,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+  if (message?.type === "pick.start") {
+    void startPickOnActiveTab().then(
+      () => sendResponse({ ok: true }),
+      (error) =>
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    );
+    return true;
+  }
+  if (message?.type === "page.log") {
+    gatewayLog(typeof message.event === "string" ? message.event : "page.event", message.data, {
+      hop: "page",
+      level: message.level,
+      message: message.message,
+      traceId: message.traceId,
+    });
+    return undefined;
+  }
   if (message?.type !== "page.snapshot") return undefined;
   const tab = sender.tab;
   if (!tab?.id || !tab.url) return undefined;
@@ -226,6 +274,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       generation: 1,
     };
     tabs.set(tabId, state);
+    gatewayLog("page.snapshot", {
+      tabId,
+      origin,
+      count: tools.length,
+      names: tools.map((tool) => (tool && typeof tool.originalName === "string" ? tool.originalName : "")).filter(Boolean),
+      runtimePresent: state.runtimePresent,
+      runtimeError: state.runtimeError,
+      reason: "connect",
+    });
     upsert(tabId, state, "connect");
     sendTools(tabId, state);
     return undefined;
@@ -238,6 +295,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   existing.runtimePresent = Boolean(message.runtimePresent);
   existing.runtimeError = message.runtimeError;
   existing.tools = tools;
+  gatewayLog("page.snapshot", {
+    tabId,
+    origin,
+    count: tools.length,
+    names: tools.map((tool) => (tool && typeof tool.originalName === "string" ? tool.originalName : "")).filter(Boolean),
+    runtimePresent: existing.runtimePresent,
+    runtimeError: existing.runtimeError,
+    reload: Boolean(reload),
+    navigated,
+  });
   if (reload || navigated) {
     existing.generation += 1;
     existing.pageInstanceId = pageInstanceId;
@@ -249,8 +316,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return undefined;
 });
 
+async function startPickOnActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab?.id) {
+    throw new Error("no active tab");
+  }
+  const url = tab.url ?? "";
+  if (url && !/^https?:/i.test(url)) {
+    throw new Error("open an http(s) page first");
+  }
+  gatewayLog("pick.start", { tabId: tab.id });
+  try {
+    const result = await chrome.tabs.sendMessage(tab.id, { type: "pick.start" });
+    if (result && result.ok === false) {
+      gatewayLog("pick.failed", { error: result.error }, { level: "warn" });
+      throw new Error(result.error || "could not start picker");
+    }
+    gatewayLog("pick.overlay", { tabId: tab.id });
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error);
+    gatewayLog("pick.failed", { error: text }, { level: "error" });
+    if (/Receiving end does not exist|message port closed/i.test(text)) {
+      throw new Error("Refresh this page, then click Register tool again.");
+    }
+    throw error instanceof Error ? error : new Error(text);
+  }
+}
+
 async function handleInvoke(message) {
   const tabId = Number(String(message.sourceId ?? "").replace(/^tab:/, ""));
+  gatewayLog(
+    "invoke.forward",
+    { sourceId: message.sourceId, originalName: message.originalName },
+    { traceId: message.requestId },
+  );
   if (!Number.isInteger(tabId) || tabId < 0) {
     send({
       type: "invokeResult",
@@ -279,7 +378,17 @@ async function handleInvoke(message) {
       isError: Boolean(result?.isError),
       error: result?.error,
     });
+    gatewayLog(
+      result?.isError ? "invoke.page.error" : "invoke.page.result",
+      { isError: Boolean(result?.isError) },
+      { level: result?.isError ? "warn" : "info", traceId: message.requestId },
+    );
   } catch (error) {
+    gatewayLog(
+      "invoke.page.failed",
+      { error: error instanceof Error ? error.message : String(error) },
+      { level: "error", traceId: message.requestId },
+    );
     send({
       type: "invokeResult",
       requestId: message.requestId,

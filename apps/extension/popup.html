@@ -13,12 +13,17 @@
       .ok { color: #0a7a28; }
       .bad { color: #b00020; }
       ul { padding-left: 1.1rem; }
+      button { font: inherit; cursor: pointer; }
     </style>
   </head>
   <body>
     <h1 style="font-size: 1rem; margin: 0 0 0.5rem">WebMCP Gateway</h1>
     <p id="status">checking…</p>
     <p id="gateway"></p>
+    <p>
+      <button type="button" id="register-tool">Register tool</button>
+    </p>
+    <p id="pick-error" class="bad" hidden></p>
     <ul id="tabs"></ul>
     <script src="popup.js"></script>
   </body>

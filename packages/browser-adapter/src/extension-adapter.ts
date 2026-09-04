@@ -4,6 +4,7 @@ import type {
   BrowserSource,
   BrowserToolInvokeRequest,
   BrowserToolInvokeResult,
+  RuntimeLog,
   RuntimeTool,
 } from "@mcp2webmcp/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -30,6 +31,7 @@ export interface ExtensionAdapterOptions {
   host?: string;
   port?: number;
   invokeTimeoutMs?: number;
+  log?: RuntimeLog;
 }
 
 interface PendingInvoke {
@@ -57,6 +59,7 @@ export class ExtensionAdapter implements BrowserAdapter {
   private readonly host: string;
   private readonly port: number;
   private readonly invokeTimeoutMs: number;
+  private readonly log?: RuntimeLog;
   private readonly listeners = new Set<(event: BrowserAdapterEvent) => void>();
   private readonly sources = new Map<string, BrowserSource>();
   private readonly tools = new Map<string, Map<string, RuntimeTool>>();
@@ -72,6 +75,7 @@ export class ExtensionAdapter implements BrowserAdapter {
     this.host = host;
     this.port = options.port ?? DEFAULT_EXTENSION_PORT;
     this.invokeTimeoutMs = options.invokeTimeoutMs ?? 65_000;
+    this.log = options.log;
   }
 
   get listenPort(): number {
@@ -96,6 +100,7 @@ export class ExtensionAdapter implements BrowserAdapter {
     }
     this.boundPort = address.port;
     this.pingTimer = setInterval(() => this.sendPing(), 20_000);
+    this.note("info", "extension.listen", { host: this.host, port: this.boundPort });
   }
 
   async stop(): Promise<void> {
@@ -148,6 +153,10 @@ export class ExtensionAdapter implements BrowserAdapter {
       throw new Error("invocation cancelled");
     }
     await this.ensureAwake();
+    this.note("info", "invoke.send", {
+      sourceId: request.sourceId,
+      originalName: request.originalName,
+    }, request.requestId);
     const args = asInvokeArgs(request.input);
     const message: ExtensionServerMessage = {
       type: "invoke",
@@ -157,7 +166,8 @@ export class ExtensionAdapter implements BrowserAdapter {
       args,
       deadline: options.deadline,
     };
-    return await new Promise<BrowserToolInvokeResult>((resolve, reject) => {
+    try {
+      const result = await new Promise<BrowserToolInvokeResult>((resolve, reject) => {
       let settled = false;
       const finish = (fn: () => void) => {
         if (settled) return;
@@ -190,22 +200,59 @@ export class ExtensionAdapter implements BrowserAdapter {
       options.signal.addEventListener("abort", onAbort, { once: true });
       this.send(message);
     });
+      this.note(
+        result.isError ? "warn" : "info",
+        "invoke.result",
+        { isError: Boolean(result.isError) },
+        request.requestId,
+      );
+      return result;
+    } catch (error) {
+      this.note(
+        "error",
+        "invoke.failed",
+        { message: error instanceof Error ? error.message : String(error) },
+        request.requestId,
+      );
+      throw error;
+    }
+  }
+
+  private note(
+    level: "debug" | "info" | "warn" | "error",
+    event: string,
+    data?: Record<string, unknown>,
+    traceId?: string,
+  ): void {
+    this.log?.write({ level, hop: "gateway", event, data, traceId });
   }
 
   private attachSocket(socket: WebSocket): void {
     this.dropSession();
+    this.note("info", "extension.ws.connected");
     const session: SocketSession = { socket, helloOk: false };
     this.session = session;
     socket.on("message", (data) => {
       if (this.session !== session) return;
       const text = typeof data === "string" ? data : data.toString();
       const message = parseExtensionClientMessage(text);
-      if (!message) return;
+      if (!message) {
+        let droppedType: string | undefined;
+        try {
+          const parsed = JSON.parse(text) as { type?: unknown };
+          droppedType = typeof parsed.type === "string" ? parsed.type : undefined;
+        } catch {
+          droppedType = undefined;
+        }
+        this.note("warn", "extension.message.dropped", { type: droppedType ?? "unparseable" });
+        return;
+      }
       this.onClientMessage(session, message);
     });
     socket.on("close", () => {
       if (this.session === session) {
         this.session = undefined;
+        this.note("warn", "extension.ws.disconnected");
         this.disconnectAllSources();
         this.rejectAllPending(new Error("extension disconnected"));
       }
@@ -229,10 +276,12 @@ export class ExtensionAdapter implements BrowserAdapter {
   private onClientMessage(session: SocketSession, message: ExtensionClientMessage): void {
     if (message.type === "hello") {
       if (message.protocolVersion !== EXTENSION_PROTOCOL_VERSION) {
+        this.note("error", "extension.hello.mismatch", { protocolVersion: message.protocolVersion });
         session.socket.close(4002, "protocol version mismatch");
         return;
       }
       session.helloOk = true;
+      this.note("info", "extension.hello");
       this.send({
         type: "helloAck",
         protocol: EXTENSION_PROTOCOL,
@@ -242,6 +291,17 @@ export class ExtensionAdapter implements BrowserAdapter {
       return;
     }
     if (!session.helloOk) return;
+    if (message.type === "log") {
+      this.log?.write({
+        level: message.level,
+        hop: message.hop,
+        event: message.event,
+        message: message.message,
+        traceId: message.traceId,
+        data: message.data,
+      });
+      return;
+    }
     if (message.type === "ping") {
       this.send({ type: "pong", id: message.id });
       return;
@@ -255,14 +315,28 @@ export class ExtensionAdapter implements BrowserAdapter {
       return;
     }
     if (message.type === "source.upsert") {
+      this.note("info", "source.upsert", {
+        sourceId: message.sourceId,
+        origin: message.origin,
+        reason: message.reason,
+      });
       this.upsertSource(message);
       return;
     }
     if (message.type === "source.remove") {
+      this.note("info", "source.remove", { sourceId: message.sourceId });
       this.removeSource(message.sourceId);
       return;
     }
     if (message.type === "tools.replace") {
+      const names = message.tools.map((tool) => tool.originalName);
+      this.note(message.runtimeError ? "warn" : "info", "tools.replace", {
+        sourceId: message.sourceId,
+        count: names.length,
+        names,
+        runtimePresent: message.runtimePresent,
+        runtimeError: message.runtimeError,
+      });
       this.replaceTools(message.sourceId, message.tools);
       return;
     }
@@ -283,6 +357,11 @@ export class ExtensionAdapter implements BrowserAdapter {
 
   private upsertSource(incoming: Extract<ExtensionClientMessage, { type: "source.upsert" }>): void {
     if (!originIsAllowed([...this.allowedOrigins], incoming.origin)) {
+      this.note("warn", "source.rejected", {
+        sourceId: incoming.sourceId,
+        origin: incoming.origin,
+        reason: "allowedOrigins",
+      });
       this.removeSource(incoming.sourceId);
       return;
     }
@@ -321,7 +400,6 @@ export class ExtensionAdapter implements BrowserAdapter {
       navigated || incoming.reason === "navigate" || incoming.reason === "reload";
     if (bump) {
       existing.generation += 1;
-      this.clearTools(existing.sourceId);
     }
     existing.origin = incoming.origin;
     existing.url = incoming.url;
@@ -379,6 +457,13 @@ export class ExtensionAdapter implements BrowserAdapter {
     };
     bucket.set(incoming.originalName, complete);
     this.tools.set(source.sourceId, bucket);
+    if (
+      existing &&
+      existing.sourceGeneration === complete.sourceGeneration &&
+      toolSnapshotKey(existing) === toolSnapshotKey(complete)
+    ) {
+      return;
+    }
     this.emit({
       type: existing ? "tool.updated" : "tool.registered",
       adapterId: this.adapterId,
@@ -472,6 +557,15 @@ export class ExtensionAdapter implements BrowserAdapter {
   private emit(event: BrowserAdapterEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+function toolSnapshotKey(tool: Pick<RuntimeTool, "identity" | "description" | "inputSchema" | "annotations">): string {
+  return JSON.stringify({
+    originalName: tool.identity.originalName,
+    description: tool.description ?? "",
+    inputSchema: tool.inputSchema ?? {},
+    annotations: tool.annotations ?? {},
+  });
 }
 
 function asInvokeArgs(input: unknown): Record<string, unknown> | undefined {

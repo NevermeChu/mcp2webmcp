@@ -147,7 +147,8 @@ export class LifecycleManager {
       return;
     }
     const identity = this.names.resolve(source, incoming.identity.originalName);
-    const previous = this.tools.get(identity.runtimeId);
+    const previous =
+      this.tools.get(identity.runtimeId) ?? this.tools.getByMcpName(identity.mcpName);
     if (!previous) {
       if (this.tools.list().length >= this.limits.maxToolsTotal) return;
       if (this.tools.countBySource(adapterId, incoming.sourceId) >= this.limits.maxToolsPerSource) {

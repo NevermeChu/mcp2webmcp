@@ -139,6 +139,8 @@ export const runtimeConfigSchema = z.object({
   runtime: z.object({
     name: z.string().default("mcp2webmcp"),
     logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
+    logPath: z.string().min(1).optional(),
+    logMaxBytes: z.number().int().positive().default(5_242_880),
     invocationDeadlineMs: z.number().int().positive().default(65_000),
   }),
   mcp: z

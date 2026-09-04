@@ -10,6 +10,7 @@ import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server
 import type { Runtime } from "@mcp2webmcp/core";
 import type { RuntimeConfig } from "@mcp2webmcp/protocol";
 import { createManagementHandlers } from "./management-tools.js";
+import { installStdioLifetime } from "./stdio-lifetime.js";
 import { ToolProjector } from "./tool-projector.js";
 
 export class McpStdioServer {
@@ -32,7 +33,14 @@ export class McpStdioServer {
   }
 
   start(): void {
+    const first = !this.unsubEvents;
     this.unsubEvents ??= this.projector.start();
+    if (first) {
+      this.runtime.log.info("mcp", "stdio.listening", {
+        name: this.config.runtime.name,
+        logPath: this.config.runtime.logPath ?? "",
+      });
+    }
   }
 
   async connect(transport: Transport): Promise<void> {
@@ -43,6 +51,13 @@ export class McpStdioServer {
   startStdio(): StdioServerHandle {
     this.start();
     this.stdioHandle = serveStdio(() => this.server);
+    installStdioLifetime({
+      stdin: process.stdin,
+      process,
+      onHangup: (reason) => {
+        void this.exitAfterHangup(reason);
+      },
+    });
     return this.stdioHandle;
   }
 
@@ -52,6 +67,21 @@ export class McpStdioServer {
     this.projector.stop();
     await this.stdioHandle?.close();
     await this.server.close();
+    for (const adapter of this.runtime.adapters.list()) {
+      await adapter.stop().catch(() => undefined);
+    }
+  }
+
+  private async exitAfterHangup(reason: string): Promise<void> {
+    this.runtime.log.info("mcp", "stdio.hangup", { reason });
+    const timer = setTimeout(() => process.exit(0), 2_000);
+    try {
+      await this.close();
+    } catch {
+      // still exit
+    }
+    clearTimeout(timer);
+    process.exit(0);
   }
 
   stats(): { projectedCount: number; omittedCount: number } {
@@ -169,6 +199,24 @@ export class McpStdioServer {
           origin: typeof record.origin === "string" ? record.origin : undefined,
           tool: typeof record.tool === "string" ? record.tool : undefined,
         })) as CallToolResult;
+      },
+    );
+    this.server.registerTool(
+      "webmcp_recent_logs",
+      {
+        description:
+          "Recent Gateway JSON logs (page / extension / gateway / mcp hops). Source of truth is the log file when MCP discovery is down.",
+        inputSchema: fromJsonSchema({
+          type: "object",
+          properties: {
+            limit: { type: "number" },
+          },
+        } as JsonSchemaType),
+      },
+      async (args): Promise<CallToolResult> => {
+        const record = asRecord(args);
+        const limit = typeof record.limit === "number" ? record.limit : undefined;
+        return (await handlers.recentLogs({ limit })) as CallToolResult;
       },
     );
   }

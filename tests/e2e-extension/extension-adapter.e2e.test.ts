@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { BrowserContext, Page } from "playwright";
+import type { BrowserContext, Page, Worker } from "playwright";
 import { chromium } from "playwright";
 import { createExtensionFixtureServer } from "../../packages/test-fixtures/webmcp-extension-demo/src/serve.mjs";
 import {
@@ -153,6 +153,68 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
     await page.close();
   }, 90_000);
 
+  it("registers a page button from the picker and invokes it through Gateway", async () => {
+    const page = await openReadyPage(context, `${originA}/picker.html`);
+    const worker = context.serviceWorkers()[0];
+    if (!worker) throw new Error("extension service worker missing");
+    await startPickerOnTab(worker, `${originA}/picker.html`);
+    await page.locator("#mcp2webmcp-picker-host").waitFor({ state: "attached" });
+    const saveBox = await page.locator("#save-btn").boundingBox();
+    if (!saveBox) throw new Error("save button has no box");
+    await page.mouse.click(saveBox.x + saveBox.width / 2, saveBox.y + saveBox.height / 2);
+    await waitFor("click_save bound", async () => {
+      const debug = await page.evaluate(() => ({
+        name: document.documentElement.getAttribute("data-mcp2webmcp-bind"),
+        error: document.documentElement.getAttribute("data-mcp2webmcp-bind-error"),
+      }));
+      if (debug.error) throw new Error(debug.error);
+      return debug.name === "click_save" ? debug.name : undefined;
+    });
+    expect(await page.locator("#clicks").textContent()).toBe("0");
+    const clickSave = await waitForOriginal(gateway.client, "click_save", originA);
+    await gateway.client.listTools({ cacheMode: "refresh" } as never);
+    const clicked = await gateway.client.callTool({ name: clickSave.mcpName, arguments: {} });
+    expect(clicked.isError).not.toBe(true);
+    await waitFor("save click counted", async () => {
+      const n = await page.locator("#clicks").textContent();
+      return n === "1" ? n : undefined;
+    });
+
+    await page.evaluate(() => {
+      document.documentElement.removeAttribute("data-mcp2webmcp-bind");
+      document.documentElement.removeAttribute("data-mcp2webmcp-bind-error");
+    });
+    await startPickerOnTab(worker, `${originA}/picker.html`);
+    await page.locator("#mcp2webmcp-picker-host").waitFor({ state: "attached" });
+    const qBox = await page.locator("#q").boundingBox();
+    if (!qBox) throw new Error("search input has no box");
+    await page.mouse.click(qBox.x + qBox.width / 2, qBox.y + qBox.height / 2);
+    await waitFor("fill_search bound", async () => {
+      const name = await page.locator("html").getAttribute("data-mcp2webmcp-bind");
+      const error = await page.locator("html").getAttribute("data-mcp2webmcp-bind-error");
+      if (error) throw new Error(error);
+      return name === "fill_search" ? name : undefined;
+    });
+    const filled = await waitFor("fill_search invoked", async () => {
+      const row = (await listedRows(gateway.client)).find(
+        (item) => item.originalName === "fill_search" && item.origin === originA,
+      );
+      if (!row) return undefined;
+      await gateway.client.listTools({ cacheMode: "refresh" } as never);
+      const result = await gateway.client.callTool({
+        name: row.mcpName,
+        arguments: { value: "hello-picker" },
+      });
+      return result.isError ? undefined : result;
+    });
+    expect(filled.isError).not.toBe(true);
+    await waitFor("search filled", async () => {
+      const value = await page.locator("#q").inputValue();
+      return value === "hello-picker" ? value : undefined;
+    });
+    await page.close();
+  }, 90_000);
+
   it("keeps a page-owned host and still invokes echo", async () => {
     const page = await openReadyPage(context, `${originA}/existing-host.html`);
     const probe = await page.evaluate(() => {
@@ -204,6 +266,24 @@ async function popupLineForOrigin(context: BrowserContext, origin: string): Prom
   } finally {
     await popup.close();
   }
+}
+
+async function startPickerOnTab(worker: Worker, targetUrl: string): Promise<void> {
+  await worker.evaluate(async (url) => {
+    const ext = (
+      globalThis as unknown as {
+        chrome: {
+          tabs: {
+            query: (query: Record<string, never>) => Promise<Array<{ id?: number; url?: string }>>;
+            sendMessage: (tabId: number, message: { type: string }) => Promise<unknown>;
+          };
+        };
+      }
+    ).chrome;
+    const found = (await ext.tabs.query({})).find((tab) => tab.url === url);
+    if (!found?.id) throw new Error("picker tab not found");
+    await ext.tabs.sendMessage(found.id, { type: "pick.start" });
+  }, targetUrl);
 }
 
 async function openReadyPage(context: BrowserContext, url: string): Promise<Page> {

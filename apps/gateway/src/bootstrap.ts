@@ -29,18 +29,27 @@ export async function bootstrap(config: RuntimeConfig): Promise<McpStdioServer> 
     );
   } else if (config.browser.adapter === "extension") {
     const extension = config.browser.extension ?? {};
-    await runtime.attach(
-      new ExtensionAdapter({
-        adapterId: "ext-1",
-        allowedOrigins: config.browser.allowedOrigins,
-        host: extension.host,
-        port: extension.port,
-        invokeTimeoutMs: extension.invokeTimeoutMs ?? config.runtime.invocationDeadlineMs,
-      }),
-    );
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: config.browser.allowedOrigins,
+      host: extension.host,
+      port: extension.port,
+      invokeTimeoutMs: extension.invokeTimeoutMs ?? config.runtime.invocationDeadlineMs,
+      log: runtime.log,
+    });
+    await runtime.attach(adapter);
+    runtime.log.info("gateway", "extension.listen", {
+      host: extension.host ?? "127.0.0.1",
+      port: adapter.listenPort,
+    });
   } else {
     throw new Error(`unsupported browser adapter: ${config.browser.adapter}`);
   }
+  runtime.log.info("gateway", "bootstrap.ready", {
+    name: config.runtime.name,
+    adapter: config.browser.adapter,
+    logPath: config.runtime.logPath ?? "",
+  });
   return new McpStdioServer(runtime, config);
 }
 

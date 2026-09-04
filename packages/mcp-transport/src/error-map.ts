@@ -78,6 +78,7 @@ export const MANAGEMENT_TOOL_NAMES = [
   "webmcp_list_consent",
   "webmcp_revoke_consent",
   "webmcp_restore_consent",
+  "webmcp_recent_logs",
 ] as const;
 
 export type ManagementToolName = (typeof MANAGEMENT_TOOL_NAMES)[number];

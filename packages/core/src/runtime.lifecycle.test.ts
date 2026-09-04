@@ -89,4 +89,18 @@ describe("LifecycleManager", () => {
     });
     expect(rt.tools.list().some((tool) => tool.identity.originalName === "stale_echo")).toBe(false);
   });
+
+  it("keeps mcpName across reload of the same tab", async () => {
+    const rt = runtime();
+    const adapter = new FakeBrowserAdapter("fake-1");
+    await rt.attach(adapter);
+    adapter.connectSource(testSource({ adapterId: "fake-1", generation: 1 }));
+    adapter.registerTool("tab-18", discoveredTool("echo"));
+    const before = rt.tools.list()[0]?.identity.mcpName;
+    adapter.reloadSource("tab-18");
+    adapter.registerTool("tab-18", discoveredTool("echo"));
+    expect(rt.tools.list()).toHaveLength(1);
+    expect(rt.tools.list()[0]?.identity.mcpName).toBe(before);
+    expect(rt.tools.list()[0]?.sourceGeneration).toBe(2);
+  });
 });

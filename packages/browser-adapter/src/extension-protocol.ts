@@ -1,4 +1,11 @@
-import type { ToolAnnotations } from "@mcp2webmcp/protocol";
+import {
+  isLogHop,
+  isLogLevel,
+  sanitizeLogData,
+  type LogHop,
+  type LogLevel,
+  type ToolAnnotations,
+} from "@mcp2webmcp/protocol";
 
 export const EXTENSION_PROTOCOL = "mcp2webmcp-extension";
 export const EXTENSION_PROTOCOL_VERSION = 1;
@@ -49,7 +56,16 @@ export type ExtensionClientMessage =
       error?: { message: string };
     }
   | { type: "ping"; id: string }
-  | { type: "pong"; id: string };
+  | { type: "pong"; id: string }
+  | {
+      type: "log";
+      level: LogLevel;
+      hop: LogHop;
+      event: string;
+      message?: string;
+      traceId?: string;
+      data?: Record<string, unknown>;
+    };
 
 export type ExtensionServerMessage =
   | {
@@ -153,6 +169,20 @@ export function parseExtensionClientMessage(raw: string): ExtensionClientMessage
   if (type === "ping" || type === "pong") {
     if (typeof msg.id !== "string") return undefined;
     return { type, id: msg.id };
+  }
+  if (type === "log") {
+    if (typeof msg.event !== "string" || msg.event.length === 0 || msg.event.length > 80) {
+      return undefined;
+    }
+    return {
+      type: "log",
+      level: isLogLevel(msg.level) ? msg.level : "info",
+      hop: isLogHop(msg.hop) ? msg.hop : "extension",
+      event: msg.event,
+      message: typeof msg.message === "string" ? msg.message.slice(0, 400) : undefined,
+      traceId: typeof msg.traceId === "string" ? msg.traceId : undefined,
+      data: sanitizeLogData(msg.data),
+    };
   }
   return undefined;
 }

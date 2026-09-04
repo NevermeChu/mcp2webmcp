@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebMCP Gateway extension demo (picker)</title>
+  </head>
+  <body>
+    <h1>extension-demo — picker</h1>
+    <p>Status: <span id="status">waiting</span></p>
+    <p>Clicks: <span id="clicks">0</span></p>
+    <button id="save-btn" type="button">Save</button>
+    <input id="q" type="text" placeholder="Search" />
+    <script>
+      const statusEl = document.getElementById("status");
+      const clicksEl = document.getElementById("clicks");
+      let clicks = 0;
+      document.getElementById("save-btn").addEventListener("click", () => {
+        clicks += 1;
+        clicksEl.textContent = String(clicks);
+      });
+      const ctx = document.modelContext || navigator.modelContext;
+      window.__runtimeProbe = {
+        runtimePresent: Boolean(ctx && typeof ctx.registerTool === "function"),
+        toolCount: typeof ctx?.getTools === "function" ? ctx.getTools().length : -1,
+      };
+      statusEl.textContent = window.__runtimeProbe.runtimePresent ? "ready" : "no-webmcp-runtime";
+    </script>
+  </body>
+</html>

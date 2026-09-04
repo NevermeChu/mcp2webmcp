@@ -21,6 +21,7 @@ const EMPTY_SCHEMA = { type: "object", properties: {} } as const;
 export class ToolProjector {
   private readonly handles = new Map<string, RegisteredTool>();
   private syncTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastFingerprint = "";
   omittedCount = 0;
   projectedCount = 0;
 
@@ -40,28 +41,55 @@ export class ToolProjector {
     if (this.syncTimer) clearTimeout(this.syncTimer);
     for (const handle of this.handles.values()) handle.remove();
     this.handles.clear();
+    this.lastFingerprint = "";
   }
 
   private scheduleSync(): void {
     if (this.syncTimer) clearTimeout(this.syncTimer);
-    this.syncTimer = setTimeout(() => this.sync(), 25);
+    this.syncTimer = setTimeout(() => this.sync(), 150);
   }
 
   private sync(): void {
     const selected = this.selectTools();
+    const fingerprint = selected
+      .map((tool) => tool.identity.mcpName)
+      .sort()
+      .join("\n");
+    if (fingerprint === this.lastFingerprint && this.handles.size === selected.length) {
+      this.projectedCount = this.handles.size;
+      this.runtime.log.debug("mcp", "projector.skip", {
+        projectedCount: this.projectedCount,
+        omittedCount: this.omittedCount,
+      });
+      return;
+    }
     const selectedNames = new Set(selected.map((tool) => tool.identity.mcpName));
+    const removed: string[] = [];
     for (const [name, handle] of this.handles) {
       if (!selectedNames.has(name)) {
         handle.remove();
         this.handles.delete(name);
+        removed.push(name);
       }
     }
+    const added: string[] = [];
     for (const tool of selected) {
       const name = tool.identity.mcpName;
       if (this.handles.has(name)) continue;
-      this.handles.set(name, this.registerDynamic(tool));
+      const handle = this.registerDynamic(tool);
+      if (handle) {
+        this.handles.set(name, handle);
+        added.push(name);
+      }
     }
+    this.lastFingerprint = fingerprint;
     this.projectedCount = this.handles.size;
+    this.runtime.log.info("mcp", "projector.sync", {
+      added,
+      removed,
+      projectedCount: this.projectedCount,
+      omittedCount: this.omittedCount,
+    });
   }
 
   private selectTools(): RuntimeTool[] {
@@ -101,33 +129,42 @@ export class ToolProjector {
     return selected;
   }
 
-  private registerDynamic(tool: RuntimeTool): RegisteredTool {
+  private registerDynamic(tool: RuntimeTool): RegisteredTool | undefined {
     const schema = asJsonSchema(tool.inputSchema);
     const mcpName = tool.identity.mcpName;
-    return this.server.registerTool(
-      mcpName,
-      {
-        title: tool.identity.originalName,
-        description: tool.description ?? tool.identity.originalName,
-        inputSchema: schema,
-        annotations: tool.annotations,
-      },
-      async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
-        const result = await this.runtime.router.invoke(
-          {
-            requestId: randomUUID(),
-            target: { mcpName },
-            input: args ?? {},
-            client: { processInstanceId: this.processInstanceId },
-          },
-          {
-            signal: ctx.mcpReq.signal,
-            deadline: Date.now() + (this.config.runtime.invocationDeadlineMs ?? DEFAULT_INVOCATION_DEADLINE_MS),
-          },
-        );
-        return mapInvokeResult(result) as CallToolResult;
-      },
-    );
+    try {
+      return this.server.registerTool(
+        mcpName,
+        {
+          title: tool.identity.originalName,
+          description: tool.description ?? tool.identity.originalName,
+          inputSchema: schema,
+          annotations: tool.annotations,
+        },
+        async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
+          const result = await this.runtime.router.invoke(
+            {
+              requestId: randomUUID(),
+              target: { mcpName },
+              input: args ?? {},
+              client: { processInstanceId: this.processInstanceId },
+            },
+            {
+              signal: ctx.mcpReq.signal,
+              deadline: Date.now() + (this.config.runtime.invocationDeadlineMs ?? DEFAULT_INVOCATION_DEADLINE_MS),
+            },
+          );
+          return mapInvokeResult(result) as CallToolResult;
+        },
+      );
+    } catch (error) {
+      this.omittedCount += 1;
+      this.runtime.log.error("mcp", "projector.register.failed", {
+        mcpName,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
   }
 }
 

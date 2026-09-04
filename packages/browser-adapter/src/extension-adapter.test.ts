@@ -258,6 +258,27 @@ describe("ExtensionAdapter", () => {
     await waitFor(async () => (await adapter.listSources())[0]?.generation === 2);
   });
 
+  it("does not emit tool.updated when tools.replace is identical", async () => {
+    const { adapter, client } = await boot();
+    const events: string[] = [];
+    adapter.subscribe((event) => events.push(event.type));
+    client.send({
+      type: "source.upsert",
+      sourceId: "tab:5",
+      tabId: "5",
+      origin: "http://127.0.0.1:18081",
+      url: "http://127.0.0.1:18081/",
+      reason: "connect",
+    });
+    const tools = [{ originalName: "echo", inputSchema: { type: "object", properties: {} } }];
+    client.send({ type: "tools.replace", sourceId: "tab:5", tools });
+    await waitFor(async () => (await adapter.listTools("tab:5")).length === 1);
+    const afterFirst = events.filter((type) => type.startsWith("tool.")).length;
+    client.send({ type: "tools.replace", sourceId: "tab:5", tools });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(events.filter((type) => type.startsWith("tool.")).length).toBe(afterFirst);
+  });
+
   it("strips non-descriptor fields from tools.replace", () => {
     const parsed = parseExtensionClientMessage(
       JSON.stringify({
@@ -282,6 +303,52 @@ describe("ExtensionAdapter", () => {
       inputSchema: { type: "object" },
       annotations: { readOnlyHint: true },
     });
+  });
+
+  it("strips secret-like fields from client log frames", () => {
+    const parsed = parseExtensionClientMessage(
+      JSON.stringify({
+        type: "log",
+        hop: "page",
+        event: "runtime.wrapped",
+        data: { originalName: "echo", cookie: "sid=1", names: ["echo"] },
+      }),
+    );
+    expect(parsed?.type).toBe("log");
+    if (parsed?.type !== "log") throw new Error("expected log");
+    expect(parsed.hop).toBe("page");
+    expect(parsed.data).toEqual({ originalName: "echo", names: ["echo"] });
+  });
+
+  it("records extension log frames on the gateway sink", async () => {
+    const records: Array<{ event: string; hop?: string }> = [];
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: [],
+      port: 0,
+      log: {
+        path: "",
+        write(record) {
+          records.push(record);
+        },
+        recent() {
+          return [];
+        },
+      },
+    });
+    adapters.push(adapter);
+    await adapter.start();
+    const client = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(client);
+    await client.hello();
+    client.send({
+      type: "log",
+      hop: "extension",
+      event: "page.snapshot",
+      data: { count: 1, names: ["echo"] },
+    });
+    await waitFor(() => records.some((row) => row.event === "page.snapshot"));
+    expect(records.find((row) => row.event === "page.snapshot")?.hop).toBe("extension");
   });
 
   it("refuses to construct with wildcard origins or a non-loopback host", () => {

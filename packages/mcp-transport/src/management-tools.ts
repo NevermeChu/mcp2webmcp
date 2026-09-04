@@ -72,6 +72,7 @@ export function createManagementHandlers(
         tools: runtime.tools.list().length,
         adapters: runtime.adapters.list().map((adapter) => adapter.adapterId),
         eventRevision: runtime.events.currentRevision(),
+        logPath: config.runtime.logPath ?? "",
         ...extra,
       });
     },
@@ -101,6 +102,14 @@ export function createManagementHandlers(
         },
       );
       return mapInvokeResult(result);
+    },
+
+    async recentLogs(input: { limit?: number } = {}) {
+      const limit = typeof input.limit === "number" && Number.isFinite(input.limit) ? input.limit : 80;
+      return jsonText({
+        path: runtime.log.path,
+        records: runtime.log.recent(limit),
+      });
     },
 
     async listConsent() {
