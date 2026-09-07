@@ -185,6 +185,7 @@ function startPick() {
         display: none;
       }
       #highlight.invalid { border-color: #888; background: rgba(0,0,0,.06); }
+      #highlight.destructive { border-color: #ef4444; background: rgba(239, 68, 68, 0.22); }
       #tooltip {
         position: fixed;
         pointer-events: none;
@@ -199,6 +200,7 @@ function startPick() {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      #tooltip.destructive { background: #dc2626; font-weight: 600; }
     </style>
     <div id="banner"><span id="msg">Click a button or input to register it as a tool</span> <button type="button" id="cancel">Esc</button></div>
     <div id="highlight"></div>
@@ -276,16 +278,25 @@ function paintHover() {
   const picker = globalThis.mcp2webmcpPicker;
   const rect = hovered.getBoundingClientRect();
   const ok = picker.isBindable(hovered);
+  const proposed = ok ? picker.proposeTool(hovered) : null;
+  const isDestructive = Boolean(proposed?.annotations?.destructiveHint);
+
   const box = pickUi.highlight;
   box.classList.toggle("invalid", !ok);
+  box.classList.toggle("destructive", ok && isDestructive);
   box.style.display = "block";
   box.style.top = `${rect.top}px`;
   box.style.left = `${rect.left}px`;
   box.style.width = `${rect.width}px`;
   box.style.height = `${rect.height}px`;
+
   const tip = pickUi.tooltip;
-  const proposed = ok ? picker.proposeTool(hovered) : null;
-  tip.textContent = proposed ? proposed.name : hovered.tagName.toLowerCase();
+  tip.classList.toggle("destructive", ok && isDestructive);
+  if (ok && isDestructive) {
+    tip.textContent = `⚠️ [Destructive] ${proposed.name}`;
+  } else {
+    tip.textContent = proposed ? proposed.name : hovered.tagName.toLowerCase();
+  }
   tip.style.display = "block";
   tip.style.top = `${Math.max(0, rect.top - 22)}px`;
   tip.style.left = `${Math.max(0, rect.left)}px`;
@@ -324,7 +335,17 @@ function onPickClick(event) {
       if (msg) msg.textContent = `Bind failed: ${result?.error ?? "unknown"}`;
       return;
     }
-    stopPick();
+    const toolName = result?.name || proposed.name;
+    if (msg) {
+      msg.textContent = `Registered ${toolName}! Click another or Esc to finish.`;
+    }
+    const banner = pickUi?.banner;
+    if (banner) {
+      banner.style.background = "#15803d";
+      window.setTimeout(() => {
+        if (pickUi?.banner) pickUi.banner.style.background = "#1a1a1a";
+      }, 1500);
+    }
   };
   window.setTimeout(() => {
     if (pendingBind) pendingBind({ ok: false, error: "timeout" });
