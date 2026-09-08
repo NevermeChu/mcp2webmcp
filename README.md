@@ -11,7 +11,7 @@ pnpm install
 pnpm build
 ```
 
-Gateway 开发入口：`node apps/gateway/dist/main.js`。安装后的 CLI 是 **`mcp2webmcp`**。v0.1 只提供 **stdio MCP**。
+Gateway 开发入口：`node apps/gateway/dist/main.js --config configs/demo.yaml`。必须显式传 `--config`（或 `MCP2WEBMCP_CONFIG`），没有内置默认配置。安装后的 CLI 是 **`mcp2webmcp`**。v0.1 只提供 **stdio MCP**。
 
 不要把带本机绝对路径的 `.cursor/mcp.json` 提交进 Git。
 
@@ -48,16 +48,20 @@ pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
 
 `configs/extension-demo.yaml` 默认 `allowedOrigins: []`：扩展发现到的工具会写入本地同意账本，MCP 可直接调用。不想暴露时用 `webmcp_revoke_consent`。yaml 里若仍列出 origin，则必须与地址栏逐字一致（`localhost` ≠ `127.0.0.1`）。
 
+扩展模式必须配置共享令牌：在 Gateway yaml 设置 `browser.extension.authToken`，或设置环境变量 `MCP2WEBMCP_EXTENSION_TOKEN`；再到扩展 Side Panel →「Gateway 鉴权令牌」粘贴同一 token。loopback 握手同时校验 `chrome-extension://` Origin；扩展断线有 15 秒宽限期（`browser.extension.disconnectGraceMs`），详见 [ADR 0010](docs/adr/0010-extension-loopback-auth.md)。
+
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [docs/connect-mcp-client.md](docs/connect-mcp-client.md) | 接到 Cursor / Claude |
-| [docs/architecture.md](docs/architecture.md) | 架构与仓库结构 |
-| [docs/extension-loopback-protocol.md](docs/extension-loopback-protocol.md) | 扩展 ↔ Gateway 协议 |
-| [docs/develop.md](docs/develop.md) | 测试与配置 |
-| [docs/README.md](docs/README.md) | 文档索引 |
+| 文档                                                                                                     | 内容                             |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| [docs/connect-mcp-client.md](docs/connect-mcp-client.md)                                                 | 接到 Cursor / Claude             |
+| [docs/architecture.md](docs/architecture.md)                                                             | 架构与仓库结构                   |
+| [docs/extension-loopback-protocol.md](docs/extension-loopback-protocol.md)                               | 扩展 ↔ Gateway 协议              |
+| [docs/develop.md](docs/develop.md)                                                                       | 测试与配置                       |
+| [docs/README.md](docs/README.md)                                                                         | 文档索引                         |
+| [docs/current/README.md](docs/current/README.md)                                                         | 以当前代码为真相源的知识库       |
 | [docs/adr/0009-extension-webmcp-runtime-polyfill.md](docs/adr/0009-extension-webmcp-runtime-polyfill.md) | 扩展页面 WebMCP runtime polyfill |
+| [docs/adr/0010-extension-loopback-auth.md](docs/adr/0010-extension-loopback-auth.md)                     | 扩展 loopback 鉴权与断线宽限期   |
 
 ## License
 

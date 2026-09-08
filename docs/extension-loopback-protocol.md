@@ -13,10 +13,14 @@ v0.1 私有 JSON 协议：Chrome/Edge MV3 扩展把页面 WebMCP 工具搬到本
 ## Transport
 
 - WebSocket，文本帧，每帧一个 JSON 对象。
+- Gateway 将单帧限制为 1 MiB；`tools.replace` 每个快照最多 500 个工具。
 - 服务端只 bind `127.0.0.1`（或规范化后的 loopback）。非 loopback 远端一律断开。
-- 协议名：`mcp2webmcp-extension`。版本：`1`。
-- 扩展先发 `hello`；Gateway 回 `helloAck` 后才处理业务帧。版本不匹配则关闭。
-- v0.1：一条扩展连接对应一个 Gateway 进程。后连上的 socket 取代前一个。多 Gateway 共享浏览器连接留到下一步。
+- 握手 `Origin` 头必须是 `chrome-extension://…`（浏览器对扩展 WebSocket 强制带此头，网页无法伪造）。其他 origin 一律 `4003` 拒绝，挡住网页对 loopback 端口的 drive-by 连接。
+- 共享令牌必填：Gateway yaml 配置 `browser.extension.authToken`，或通过环境变量 `MCP2WEBMCP_EXTENSION_TOKEN` 注入；`hello` 必须携带相同 `token`，否则 `4001` 关闭。扩展在 Side Panel「Gateway 鉴权令牌」里粘贴一次，存入 `chrome.storage.local`。
+- 协议名：`mcp2webmcp-extension`。版本：`2`。
+- 扩展先发 `hello`；Gateway 回 `helloAck` 后才处理业务帧。版本不匹配 `4002`；hello 10 秒内未完成 `4001` 关闭。
+- 一条扩展连接对应一个 Gateway 进程。**只有完成 hello 的新连接**才会取代旧连接（旧连接 `4000` 关闭）；未 hello 的新连接不会影响已建立的会话。
+- WebSocket 意外断开时，Gateway 保留该连接上的 source 一段宽限期（默认 15 秒，`browser.extension.disconnectGraceMs` 可调，`0` 关闭）。扩展重连并 hello 后快照重放，MCP 客户端看到的工具列表不抖动；宽限期满仍未回来才摘除并广播变更。显式 `source.remove` 不等宽限期。
 
 ## 消息
 
@@ -28,7 +32,8 @@ v0.1 私有 JSON 协议：Chrome/Edge MV3 扩展把页面 WebMCP 工具搬到本
 {
   "type": "hello",
   "protocol": "mcp2webmcp-extension",
-  "protocolVersion": 1
+  "protocolVersion": 2,
+  "token": "<必填，Gateway authToken>"
 }
 ```
 
@@ -38,7 +43,7 @@ v0.1 私有 JSON 协议：Chrome/Edge MV3 扩展把页面 WebMCP 工具搬到本
 {
   "type": "helloAck",
   "protocol": "mcp2webmcp-extension",
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "adapterId": "ext-1"
 }
 ```
@@ -73,7 +78,15 @@ Gateway 对 yaml `allowedOrigins` 非空时，名单外的 origin **不投影**�
 { "type": "source.remove", "sourceId": "tab:18" }
 ```
 
-WebSocket 断开时，Gateway 会把该连接上的全部 source 标为 disconnected。
+WebSocket 断开时，Gateway 在宽限期内保留该连接上的 source（见 Transport），期满仍未重连才移除。
+
+### `sourceAck`（Gateway → 扩展）
+
+Gateway 接受 `source.upsert` 后返回权威 generation。扩展必须用它覆盖本地计数；这样 MV3 service worker 重启后，后续 invoke/result 仍绑定到正确的 source 代次。
+
+```json
+{ "type": "sourceAck", "sourceId": "tab:18", "sourceGeneration": 3 }
+```
 
 ### `tools.replace`（扩展 → Gateway）
 
@@ -92,11 +105,13 @@ WebSocket 断开时，Gateway 会把该连接上的全部 source 标为 disconne
         "properties": { "message": { "type": "string" } },
         "required": ["message"]
       },
-      "annotations": { "readOnlyHint": true, "idempotentHint": true }
+      "annotations": { "idempotentHint": true }
     }
   ]
 }
 ```
+
+注解是页面自我申报的。Gateway 会剥掉 `readOnlyHint`、`idempotentHint` 以及所有会放宽信任的 false 值；只保留会收紧行为的 `destructiveHint: true` 与 `openWorldHint: true`。
 
 策略 match 的是页面 **`originalName`**（`echo`），不是 MCP 上带哈希的 `mcpName`。
 
@@ -109,6 +124,7 @@ WebSocket 断开时，Gateway 会把该连接上的全部 source 标为 disconne
   "type": "invoke",
   "requestId": "r1",
   "sourceId": "tab:18",
+  "sourceGeneration": 1,
   "originalName": "echo",
   "args": { "message": "hello" },
   "deadline": 1710000000000
@@ -118,7 +134,7 @@ WebSocket 断开时，Gateway 会把该连接上的全部 source 标为 disconne
 ### `invokeCancel`（Gateway → 扩展）
 
 ```json
-{ "type": "invokeCancel", "requestId": "r1", "sourceId": "tab:18" }
+{ "type": "invokeCancel", "requestId": "r1", "sourceId": "tab:18", "sourceGeneration": 1 }
 ```
 
 ### `invokeResult`（扩展 → Gateway）
@@ -128,12 +144,13 @@ WebSocket 断开时，Gateway 会把该连接上的全部 source 标为 disconne
   "type": "invokeResult",
   "requestId": "r1",
   "sourceId": "tab:18",
+  "sourceGeneration": 1,
   "content": [{ "type": "text", "text": "echo:hello" }],
   "isError": false
 }
 ```
 
-出错时 `isError: true`，可带 `error: { "message": "..." }`。不要把凭证塞进 `content`。
+出错时 `isError: true`，可带 `error: { "message": "..." }`。若页面在调用期间发生导航，返回 `error.code: "OUTCOME_UNKNOWN"`；Gateway 不会把这种结果误报为确定失败。不要把凭证塞进 `content`。
 
 ### `ping` / `pong`
 

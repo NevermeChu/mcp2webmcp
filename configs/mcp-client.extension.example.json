@@ -6,7 +6,10 @@
         "REPO_ROOT/apps/gateway/dist/main.js",
         "--config",
         "REPO_ROOT/configs/extension-demo.yaml"
-      ]
+      ],
+      "env": {
+        "MCP2WEBMCP_EXTENSION_TOKEN": "REPLACE_WITH_A_RANDOM_TOKEN"
+      }
     }
   }
 }

@@ -1,15 +1,17 @@
 # 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [connect-mcp-client.md](connect-mcp-client.md) | 接到 Cursor / Claude Desktop |
-| [architecture.md](architecture.md) | 架构与仓库结构 |
-| [extension-loopback-protocol.md](extension-loopback-protocol.md) | 扩展 ↔ Gateway JSON 协议 |
-| [develop.md](develop.md) | 测试与配置 |
-| [adr/0000-mcpb-integration-mode.md](adr/0000-mcpb-integration-mode.md) | 为何包装 MCP-B `RelayBridgeServer` |
-| [adr/0008-extension-adapter-loopback.md](adr/0008-extension-adapter-loopback.md) | 扩展 loopback，扩展不是 MCP server |
+当前实现知识库从 [current/README.md](current/README.md) 开始。`adr/` 与 `spikes/` 保留当时的决策和实验事实；若与当前知识库冲突，以当前代码、配置 schema 和测试为准。
+
+| 文档                                                                                           | 内容                                              |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| [connect-mcp-client.md](connect-mcp-client.md)                                                 | 接到 Cursor / Claude Desktop                      |
+| [architecture.md](architecture.md)                                                             | 架构与仓库结构                                    |
+| [extension-loopback-protocol.md](extension-loopback-protocol.md)                               | 扩展 ↔ Gateway JSON 协议                          |
+| [develop.md](develop.md)                                                                       | 测试与配置                                        |
+| [adr/0000-mcpb-integration-mode.md](adr/0000-mcpb-integration-mode.md)                         | 为何包装 MCP-B `RelayBridgeServer`                |
+| [adr/0008-extension-adapter-loopback.md](adr/0008-extension-adapter-loopback.md)               | 扩展 loopback，扩展不是 MCP server                |
 | [adr/0009-extension-webmcp-runtime-polyfill.md](adr/0009-extension-webmcp-runtime-polyfill.md) | 扩展 MAIN world 补一份可删除的页面 WebMCP runtime |
-| [spikes/0001-mcpb-integration.md](spikes/0001-mcpb-integration.md) | 历史：Phase -1 真实链路记录 |
+| [spikes/0001-mcpb-integration.md](spikes/0001-mcpb-integration.md)                             | 历史：Phase -1 真实链路记录                       |
 
 一次性 spike 源码在 `spikes/0001-mcpb-integration`。
 

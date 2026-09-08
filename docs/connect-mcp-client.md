@@ -64,9 +64,7 @@ $env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18081"
 pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
 ```
 
-打开 `http://127.0.0.1:18081`。
-4. 在项目 `.cursor/mcp.json` 里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），不要改掉已有 `mcp2webmcp-demo` 的 `demo.yaml`。
-5. Cursor 服务名 `mcp2webmcp-extension-demo`。页面 `registerTool` 后 `webmcp_list_tools` 应看到该工具（`consented: true`）。不想给 MCP 用时调用 `webmcp_revoke_consent`（`origin` + 可选 `tool`）。
+打开 `http://127.0.0.1:18081`。4. 在项目 `.cursor/mcp.json` 里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），把占位符换成随机共享令牌，不要改掉已有 `mcp2webmcp-demo` 的 `demo.yaml`。5. 在扩展 Side Panel「Gateway 鉴权令牌」保存同一个令牌；Extension 模式缺少令牌会拒绝启动/连接。6. Cursor 服务名 `mcp2webmcp-extension-demo`。页面 `registerTool` 后 `webmcp_list_tools` 应看到该工具（`consented: true`）。不想给 MCP 用时调用 `webmcp_revoke_consent`（`origin` + 可选 `tool`）；恢复必须使用本机 CLI，见 [current/configuration.md](current/configuration.md)。
 
 v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条浏览器连接留到下一步。
 
@@ -82,11 +80,11 @@ v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条
 
 仍使用品牌前缀 `MCP2WEBMCP_*`：
 
-| 变量 | 作用 |
-| --- | --- |
-| `MCP2WEBMCP_CONFIG` | 等效 `--config` |
-| `MCP2WEBMCP_ALLOWED_ORIGINS` | 逗号分隔，覆盖 yaml 里的 allowlist |
-| `MCP2WEBMCP_LOG_LEVEL` | `debug` / `info` / `warn` / `error`（日志只应打 stderr，以免破坏 stdio MCP） |
+| 变量                         | 作用                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `MCP2WEBMCP_CONFIG`          | 等效 `--config`                                                              |
+| `MCP2WEBMCP_ALLOWED_ORIGINS` | 逗号分隔，覆盖 yaml 里的 allowlist                                           |
+| `MCP2WEBMCP_LOG_LEVEL`       | `debug` / `info` / `warn` / `error`（日志只应打 stderr，以免破坏 stdio MCP） |
 
 ## 常见问题
 

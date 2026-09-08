@@ -3,6 +3,8 @@
 # Empty allowedOrigins: every origin the extension discovers is admitted.
 # Users revoke with webmcp_revoke_consent (origin and optional tool name).
 # 9334 is the extension loopback; do not use 9333 (MCP-B relay).
+# Set MCP2WEBMCP_EXTENSION_TOKEN before startup and paste the same token into
+# the extension Side Panel. Extension mode refuses to start without it.
 
 runtime:
   name: mcp2webmcp-extension-demo

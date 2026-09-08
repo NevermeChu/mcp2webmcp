@@ -4,10 +4,10 @@ WebMCP Gateway（**mcp2webmcp**）从支持 WebMCP 的页面发现工具，经 s
 
 ## 两条接入
 
-| 路径 | 配置 | 页面 | 本机端口 |
-| --- | --- | --- | --- |
-| cooperative embed | `adapter: mcpb`，`configs/demo.yaml` | `registerTool` + MCP-B embed | relay `127.0.0.1:9333` |
-| 扩展 | `adapter: extension`，`configs/extension-demo.yaml` | 只 `registerTool` | loopback `127.0.0.1:9334` |
+| 路径              | 配置                                                | 页面                         | 本机端口                  |
+| ----------------- | --------------------------------------------------- | ---------------------------- | ------------------------- |
+| cooperative embed | `adapter: mcpb`，`configs/demo.yaml`                | `registerTool` + MCP-B embed | relay `127.0.0.1:9333`    |
+| 扩展              | `adapter: extension`，`configs/extension-demo.yaml` | 只 `registerTool`            | loopback `127.0.0.1:9334` |
 
 扩展**不是** MCP server。Cursor / Claude 只连 Gateway。页面 WebMCP runtime 由扩展 MAIN world 补一份可删除模块（[ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)）；发现与 Gateway 协议仍在现有扩展代码里。
 
@@ -41,6 +41,8 @@ configs/                     yaml 与 MCP 客户端模板
 
 调用链上每一跳都会写 JSONL（`hop`: `page` / `extension` / `gateway` / `mcp`）。默认路径 `~/.mcp2webmcp/logs/<runtime.name>.jsonl`。审计 JSONL 仍只记 invoke。
 
-`allowedOrigins` 对 **mcpb** 仍须显式列出。**extension** 在 `consent.enabled` 时可以留空，表示扩展发现的 origin 都会进同意账本。禁止 `*`。默认策略是否认；发现后的工具靠同意账本自动放行，yaml 规则可覆盖（deny / confirm）。`destructiveHint` 仍升为 confirm，无审批通道时 fail-closed。
+`allowedOrigins` 对 **mcpb** 仍须显式列出。**extension** 在 `consent.enabled` 时可以留空，表示扩展发现的 origin 都会进同意账本。禁止 `*`。默认策略是否认；发现后的工具靠同意账本自动放行，yaml 规则可覆盖（deny / confirm）。
+
+页面上报的工具注解视为**自我申报**：`readOnlyHint` 和 `idempotentHint` 一律剥除；仅保留会收紧行为的 `destructiveHint: true` 与 `openWorldHint: true`。扩展 loopback 同时校验 `chrome-extension://` Origin 和必填共享令牌 `browser.extension.authToken`（也可用 `MCP2WEBMCP_EXTENSION_TOKEN` 注入），见 [ADR 0010](adr/0010-extension-loopback-auth.md)。扩展 WebSocket 意外断开有默认 15 秒宽限期。多个 Gateway 进程共享同意账本文件：每次读取均刷新，写入通过跨进程锁、磁盘合并和原子替换避免丢失更新。
 
 详细接线见 [connect-mcp-client.md](connect-mcp-client.md)。决策记录在 [adr/](adr/)。
