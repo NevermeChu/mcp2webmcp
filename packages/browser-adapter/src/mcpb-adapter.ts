@@ -28,6 +28,7 @@ export class McpBAdapter implements BrowserAdapter {
   private syncTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly listeners = new Set<(event: BrowserAdapterEvent) => void>();
   private readonly sources = new Map<string, BrowserSource>();
+  private readonly sourceGenerations = new Map<string, number>();
   private readonly tools = new Map<string, Map<string, RuntimeTool>>();
   private readonly invokeNames = new Map<string, string>();
   private readonly onStateChanged = (): void => this.scheduleSync();
@@ -132,10 +133,11 @@ export class McpBAdapter implements BrowserAdapter {
     const existing = this.sources.get(relaySource.sourceId);
     const now = Date.now();
     if (!existing) {
+      const generation = (this.sourceGenerations.get(relaySource.sourceId) ?? 0) + 1;
       const source: BrowserSource = {
         adapterId: this.adapterId,
         sourceId: relaySource.sourceId,
-        generation: 1,
+        generation,
         browserId: "mcpb-relay",
         tabId: relaySource.tabId || relaySource.sourceId,
         origin,
@@ -146,6 +148,7 @@ export class McpBAdapter implements BrowserAdapter {
         updatedAt: now,
         state: "connected",
       };
+      this.sourceGenerations.set(source.sourceId, generation);
       this.sources.set(source.sourceId, source);
       this.tools.set(source.sourceId, new Map());
       this.emit({
@@ -162,6 +165,7 @@ export class McpBAdapter implements BrowserAdapter {
     const navigated = existing.origin !== origin || existing.url !== url;
     if (navigated) {
       existing.generation += 1;
+      this.sourceGenerations.set(existing.sourceId, existing.generation);
       this.clearTools(existing.sourceId);
     }
     existing.origin = origin;
@@ -234,7 +238,10 @@ export class McpBAdapter implements BrowserAdapter {
     };
     bucket.set(incoming.originalName, complete);
     this.tools.set(source.sourceId, bucket);
-    this.invokeNames.set(this.invokeKey(source.sourceId, incoming.originalName), incoming.invokeName);
+    this.invokeNames.set(
+      this.invokeKey(source.sourceId, incoming.originalName),
+      incoming.invokeName,
+    );
     this.emit({
       type: existing ? "tool.updated" : "tool.registered",
       adapterId: this.adapterId,

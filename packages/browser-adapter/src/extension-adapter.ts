@@ -1,11 +1,12 @@
-import type {
-  BrowserAdapter,
-  BrowserAdapterEvent,
-  BrowserSource,
-  BrowserToolInvokeRequest,
-  BrowserToolInvokeResult,
-  RuntimeLog,
-  RuntimeTool,
+import {
+  RuntimeError,
+  type BrowserAdapter,
+  type BrowserAdapterEvent,
+  type BrowserSource,
+  type BrowserToolInvokeRequest,
+  type BrowserToolInvokeResult,
+  type RuntimeLog,
+  type RuntimeTool,
 } from "@mcp2webmcp/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
@@ -31,11 +32,16 @@ export interface ExtensionAdapterOptions {
   host?: string;
   port?: number;
   invokeTimeoutMs?: number;
+  /** Required shared token; the extension hello must carry the same value. */
+  authToken: string;
+  /** Grace period before a dropped WebSocket's sources are removed. 0 disables. */
+  disconnectGraceMs?: number;
   log?: RuntimeLog;
 }
 
 interface PendingInvoke {
   sourceId: string;
+  sourceGeneration: number;
   resolve: (result: BrowserToolInvokeResult) => void;
   reject: (error: Error) => void;
   abort: () => void;
@@ -44,6 +50,7 @@ interface PendingInvoke {
 interface SocketSession {
   socket: WebSocket;
   helloOk: boolean;
+  helloTimer?: ReturnType<typeof setTimeout>;
 }
 
 export class ExtensionAdapter implements BrowserAdapter {
@@ -52,16 +59,20 @@ export class ExtensionAdapter implements BrowserAdapter {
   private revision = 0;
   private boundPort = 0;
   private server: WebSocketServer | undefined;
-  private session: SocketSession | undefined;
+  private readonly sessions = new Set<SocketSession>();
+  private graceTimer: ReturnType<typeof setTimeout> | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
   private pingSeq = 0;
   private readonly allowedOrigins: Set<string>;
   private readonly host: string;
   private readonly port: number;
   private readonly invokeTimeoutMs: number;
+  private readonly authToken: string;
+  private readonly disconnectGraceMs: number;
   private readonly log?: RuntimeLog;
   private readonly listeners = new Set<(event: BrowserAdapterEvent) => void>();
   private readonly sources = new Map<string, BrowserSource>();
+  private readonly sourceGenerations = new Map<string, number>();
   private readonly tools = new Map<string, Map<string, RuntimeTool>>();
   private readonly pending = new Map<string, PendingInvoke>();
   private readonly pingWaiters = new Map<string, () => void>();
@@ -70,11 +81,16 @@ export class ExtensionAdapter implements BrowserAdapter {
     assertOriginPolicy(options.allowedOrigins);
     const host = normalizeLoopbackHost(options.host ?? "127.0.0.1");
     assertLoopbackHost(host);
+    if (!options.authToken || options.authToken.length > 512) {
+      throw new Error("extension adapter requires authToken between 1 and 512 characters");
+    }
     this.adapterId = options.adapterId ?? "ext-1";
     this.allowedOrigins = new Set(options.allowedOrigins);
     this.host = host;
     this.port = options.port ?? DEFAULT_EXTENSION_PORT;
     this.invokeTimeoutMs = options.invokeTimeoutMs ?? 65_000;
+    this.authToken = options.authToken;
+    this.disconnectGraceMs = options.disconnectGraceMs ?? 15_000;
     this.log = options.log;
   }
 
@@ -84,11 +100,17 @@ export class ExtensionAdapter implements BrowserAdapter {
 
   async start(): Promise<void> {
     if (this.server) return;
-    const server = new WebSocketServer({ host: this.host, port: this.port });
+    const server = new WebSocketServer({ host: this.host, port: this.port, maxPayload: 1_048_576 });
     this.server = server;
     server.on("connection", (socket, request) => {
       if (!isLoopbackAddress(request.socket.remoteAddress)) {
         socket.close(4003, "loopback only");
+        return;
+      }
+      const origin = request.headers.origin ?? "";
+      if (!/^chrome-extension:\/\//i.test(origin)) {
+        this.note("warn", "extension.ws.originRejected", { origin });
+        socket.close(4003, "extension origin required");
         return;
       }
       this.attachSocket(socket);
@@ -146,60 +168,78 @@ export class ExtensionAdapter implements BrowserAdapter {
     if (!tool) {
       throw new Error(`tool not published: ${request.originalName}`);
     }
-    if (!this.session?.helloOk) {
+    if (!this.liveSession()) {
       throw new Error("extension is not connected");
     }
     if (options.signal.aborted) {
       throw new Error("invocation cancelled");
     }
     await this.ensureAwake();
-    this.note("info", "invoke.send", {
-      sourceId: request.sourceId,
-      originalName: request.originalName,
-    }, request.requestId);
+    this.note(
+      "info",
+      "invoke.send",
+      {
+        sourceId: request.sourceId,
+        originalName: request.originalName,
+      },
+      request.requestId,
+    );
     const args = asInvokeArgs(request.input);
     const message: ExtensionServerMessage = {
       type: "invoke",
       requestId: request.requestId,
       sourceId: request.sourceId,
+      sourceGeneration: request.sourceGeneration,
       originalName: request.originalName,
       args,
       deadline: options.deadline,
     };
     try {
       const result = await new Promise<BrowserToolInvokeResult>((resolve, reject) => {
-      let settled = false;
-      const finish = (fn: () => void) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        options.signal.removeEventListener("abort", onAbort);
-        this.pending.delete(request.requestId);
-        fn();
-      };
-      const onAbort = () => {
-        this.send({
-          type: "invokeCancel",
-          requestId: request.requestId,
+        let settled = false;
+        const finish = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          options.signal.removeEventListener("abort", onAbort);
+          this.pending.delete(request.requestId);
+          fn();
+        };
+        const onAbort = () => {
+          this.send({
+            type: "invokeCancel",
+            requestId: request.requestId,
+            sourceId: request.sourceId,
+            sourceGeneration: request.sourceGeneration,
+          });
+          finish(() => reject(new RuntimeError("CANCELLED", "invocation cancelled", "unknown")));
+        };
+        const remain = Math.max(1, Math.min(this.invokeTimeoutMs, options.deadline - Date.now()));
+        const timer = setTimeout(
+          () =>
+            finish(() =>
+              reject(
+                new RuntimeError("OUTCOME_UNKNOWN", "extension invocation timed out", "unknown"),
+              ),
+            ),
+          remain,
+        );
+        if (options.signal.aborted) {
+          finish(() =>
+            reject(new RuntimeError("CANCELLED", "invocation cancelled", "not_executed")),
+          );
+          return;
+        }
+        this.pending.set(request.requestId, {
           sourceId: request.sourceId,
+          sourceGeneration: request.sourceGeneration,
+          resolve: (result) => finish(() => resolve(result)),
+          reject: (error) => finish(() => reject(error)),
+          abort: onAbort,
         });
-        finish(() => reject(new Error("invocation cancelled")));
-      };
-      const remain = Math.max(1, Math.min(this.invokeTimeoutMs, options.deadline - Date.now()));
-      const timer = setTimeout(() => finish(() => reject(new Error("invocation cancelled"))), remain);
-      if (options.signal.aborted) {
-        finish(() => reject(new Error("invocation cancelled")));
-        return;
-      }
-      this.pending.set(request.requestId, {
-        sourceId: request.sourceId,
-        resolve: (result) => finish(() => resolve(result)),
-        reject: (error) => finish(() => reject(error)),
-        abort: onAbort,
+        options.signal.addEventListener("abort", onAbort, { once: true });
+        this.send(message);
       });
-      options.signal.addEventListener("abort", onAbort, { once: true });
-      this.send(message);
-    });
       this.note(
         result.isError ? "warn" : "info",
         "invoke.result",
@@ -228,12 +268,16 @@ export class ExtensionAdapter implements BrowserAdapter {
   }
 
   private attachSocket(socket: WebSocket): void {
-    this.dropSession();
     this.note("info", "extension.ws.connected");
     const session: SocketSession = { socket, helloOk: false };
-    this.session = session;
+    this.sessions.add(session);
+    session.helloTimer = setTimeout(() => {
+      if (this.sessions.has(session) && !session.helloOk) {
+        socket.close(4001, "hello timeout");
+      }
+    }, 10_000);
     socket.on("message", (data) => {
-      if (this.session !== session) return;
+      if (!this.sessions.has(session)) return;
       const text = typeof data === "string" ? data : data.toString();
       const message = parseExtensionClientMessage(text);
       if (!message) {
@@ -250,39 +294,87 @@ export class ExtensionAdapter implements BrowserAdapter {
       this.onClientMessage(session, message);
     });
     socket.on("close", () => {
-      if (this.session === session) {
-        this.session = undefined;
+      if (!this.sessions.delete(session)) return;
+      if (session.helloTimer) clearTimeout(session.helloTimer);
+      this.rejectAllPending(
+        new RuntimeError("OUTCOME_UNKNOWN", "extension disconnected during invocation", "unknown"),
+      );
+      if (session.helloOk) {
         this.note("warn", "extension.ws.disconnected");
-        this.disconnectAllSources();
-        this.rejectAllPending(new Error("extension disconnected"));
+        this.scheduleGraceExpiry();
+      } else {
+        this.note("warn", "extension.ws.closedBeforeHello");
       }
     });
   }
 
   private dropSession(): void {
-    const current = this.session;
-    this.session = undefined;
-    this.pingWaiters.clear();
-    if (current) {
-      current.socket.removeAllListeners();
-      if (current.socket.readyState === current.socket.OPEN) {
-        current.socket.close(4000, "replaced");
+    this.cancelGrace();
+    for (const session of [...this.sessions]) {
+      this.sessions.delete(session);
+      if (session.helloTimer) clearTimeout(session.helloTimer);
+      session.socket.removeAllListeners();
+      if (session.socket.readyState === session.socket.OPEN) {
+        session.socket.close(4000, "replaced");
       }
     }
     this.disconnectAllSources();
-    this.rejectAllPending(new Error("extension disconnected"));
+    this.rejectAllPending(
+      new RuntimeError(
+        "OUTCOME_UNKNOWN",
+        "extension session replaced during invocation",
+        "unknown",
+      ),
+    );
+  }
+
+  private scheduleGraceExpiry(): void {
+    this.cancelGrace();
+    if (this.disconnectGraceMs <= 0) {
+      this.disconnectAllSources();
+      return;
+    }
+    this.graceTimer = setTimeout(() => {
+      this.graceTimer = undefined;
+      this.note("warn", "extension.grace.expired");
+      this.disconnectAllSources();
+    }, this.disconnectGraceMs);
+  }
+
+  private cancelGrace(): void {
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceTimer = undefined;
   }
 
   private onClientMessage(session: SocketSession, message: ExtensionClientMessage): void {
     if (message.type === "hello") {
       if (message.protocolVersion !== EXTENSION_PROTOCOL_VERSION) {
-        this.note("error", "extension.hello.mismatch", { protocolVersion: message.protocolVersion });
+        this.note("error", "extension.hello.mismatch", {
+          protocolVersion: message.protocolVersion,
+        });
         session.socket.close(4002, "protocol version mismatch");
         return;
       }
+      if (message.token !== this.authToken) {
+        this.note("warn", "extension.hello.authFailed");
+        session.socket.close(4001, "auth failed");
+        return;
+      }
       session.helloOk = true;
+      if (session.helloTimer) {
+        clearTimeout(session.helloTimer);
+        session.helloTimer = undefined;
+      }
       this.note("info", "extension.hello");
-      this.send({
+      for (const other of [...this.sessions]) {
+        if (other === session || !other.helloOk) continue;
+        this.sessions.delete(other);
+        if (other.helloTimer) clearTimeout(other.helloTimer);
+        other.socket.removeAllListeners();
+        other.socket.close(4000, "replaced");
+      }
+      this.cancelGrace();
+      this.sendTo(session, {
         type: "helloAck",
         protocol: EXTENSION_PROTOCOL,
         protocolVersion: EXTENSION_PROTOCOL_VERSION,
@@ -321,6 +413,14 @@ export class ExtensionAdapter implements BrowserAdapter {
         reason: message.reason,
       });
       this.upsertSource(message);
+      const source = this.sources.get(message.sourceId);
+      if (source) {
+        this.sendTo(session, {
+          type: "sourceAck",
+          sourceId: source.sourceId,
+          sourceGeneration: source.generation,
+        });
+      }
       return;
     }
     if (message.type === "source.remove") {
@@ -343,6 +443,20 @@ export class ExtensionAdapter implements BrowserAdapter {
     if (message.type === "invokeResult") {
       const pending = this.pending.get(message.requestId);
       if (!pending) return;
+      if (
+        pending.sourceId !== message.sourceId ||
+        pending.sourceGeneration !== message.sourceGeneration
+      ) {
+        this.note("warn", "invoke.result.stale", {
+          sourceId: message.sourceId,
+          sourceGeneration: message.sourceGeneration,
+        });
+        return;
+      }
+      if (message.error?.code === "OUTCOME_UNKNOWN") {
+        pending.reject(new RuntimeError("OUTCOME_UNKNOWN", message.error.message, "unknown"));
+        return;
+      }
       const content =
         message.content.length > 0
           ? message.content
@@ -368,10 +482,11 @@ export class ExtensionAdapter implements BrowserAdapter {
     const existing = this.sources.get(incoming.sourceId);
     const now = Date.now();
     if (!existing) {
+      const generation = (this.sourceGenerations.get(incoming.sourceId) ?? 0) + 1;
       const source: BrowserSource = {
         adapterId: this.adapterId,
         sourceId: incoming.sourceId,
-        generation: 1,
+        generation,
         browserId: "extension",
         tabId: incoming.tabId,
         origin: incoming.origin,
@@ -382,6 +497,7 @@ export class ExtensionAdapter implements BrowserAdapter {
         updatedAt: now,
         state: "connected",
       };
+      this.sourceGenerations.set(source.sourceId, generation);
       this.sources.set(source.sourceId, source);
       this.tools.set(source.sourceId, new Map());
       this.emit({
@@ -396,10 +512,10 @@ export class ExtensionAdapter implements BrowserAdapter {
     }
 
     const navigated = existing.origin !== incoming.origin || existing.url !== incoming.url;
-    const bump =
-      navigated || incoming.reason === "navigate" || incoming.reason === "reload";
+    const bump = navigated || incoming.reason === "navigate" || incoming.reason === "reload";
     if (bump) {
       existing.generation += 1;
+      this.sourceGenerations.set(existing.sourceId, existing.generation);
     }
     existing.origin = incoming.origin;
     existing.url = incoming.url;
@@ -518,19 +634,32 @@ export class ExtensionAdapter implements BrowserAdapter {
     }
   }
 
+  private liveSession(): SocketSession | undefined {
+    for (const session of this.sessions) {
+      if (session.helloOk) return session;
+    }
+    return undefined;
+  }
+
   private send(message: ExtensionServerMessage): void {
-    const socket = this.session?.socket;
-    if (!socket || socket.readyState !== socket.OPEN) return;
+    const session = this.liveSession();
+    if (!session) return;
+    this.sendTo(session, message);
+  }
+
+  private sendTo(session: SocketSession, message: ExtensionServerMessage): void {
+    const socket = session.socket;
+    if (socket.readyState !== socket.OPEN) return;
     socket.send(JSON.stringify(message));
   }
 
   private sendPing(): void {
-    if (!this.session?.helloOk) return;
+    if (!this.liveSession()) return;
     this.send({ type: "ping", id: `g${++this.pingSeq}` });
   }
 
   private async ensureAwake(): Promise<void> {
-    if (!this.session?.helloOk) {
+    if (!this.liveSession()) {
       throw new Error("extension is not connected");
     }
     const id = `pre-invoke-${++this.pingSeq}`;
@@ -559,7 +688,9 @@ export class ExtensionAdapter implements BrowserAdapter {
   }
 }
 
-function toolSnapshotKey(tool: Pick<RuntimeTool, "identity" | "description" | "inputSchema" | "annotations">): string {
+function toolSnapshotKey(
+  tool: Pick<RuntimeTool, "identity" | "description" | "inputSchema" | "annotations">,
+): string {
   return JSON.stringify({
     originalName: tool.identity.originalName,
     description: tool.description ?? "",

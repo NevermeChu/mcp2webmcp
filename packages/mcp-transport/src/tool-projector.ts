@@ -20,7 +20,9 @@ const EMPTY_SCHEMA = { type: "object", properties: {} } as const;
 
 export class ToolProjector {
   private readonly handles = new Map<string, RegisteredTool>();
-  private syncTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly handleMeta = new Map<string, string>();
+  private syncQueued = false;
+  private stopped = false;
   private lastFingerprint = "";
   omittedCount = 0;
   projectedCount = 0;
@@ -33,26 +35,43 @@ export class ToolProjector {
   ) {}
 
   start(): () => void {
+    this.stopped = false;
     this.sync();
     return this.runtime.events.subscribe(() => this.scheduleSync());
   }
 
   stop(): void {
-    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.stopped = true;
     for (const handle of this.handles.values()) handle.remove();
     this.handles.clear();
+    this.handleMeta.clear();
     this.lastFingerprint = "";
   }
 
+  /**
+   * Coalesce bursts within one turn, then flush before the next I/O turn.
+   * A timer-based debounce (the old 150ms) leaves a window where
+   * webmcp_list_tools already shows a runtime tool that tools/call cannot
+   * reach yet — the projection must never trail an observed listing.
+   */
   private scheduleSync(): void {
-    if (this.syncTimer) clearTimeout(this.syncTimer);
-    this.syncTimer = setTimeout(() => this.sync(), 150);
+    if (this.syncQueued || this.stopped) return;
+    this.syncQueued = true;
+    queueMicrotask(() => {
+      this.syncQueued = false;
+      if (this.stopped) return;
+      this.sync();
+    });
   }
 
   private sync(): void {
     const selected = this.selectTools();
-    const fingerprint = selected
-      .map((tool) => tool.identity.mcpName)
+    const meta = new Map<string, string>();
+    for (const tool of selected) {
+      meta.set(tool.identity.mcpName, toolMetaKey(tool));
+    }
+    const fingerprint = [...meta.entries()]
+      .map(([name, key]) => `${name}::${key}`)
       .sort()
       .join("\n");
     if (fingerprint === this.lastFingerprint && this.handles.size === selected.length) {
@@ -63,14 +82,13 @@ export class ToolProjector {
       });
       return;
     }
-    const selectedNames = new Set(selected.map((tool) => tool.identity.mcpName));
     const removed: string[] = [];
     for (const [name, handle] of this.handles) {
-      if (!selectedNames.has(name)) {
-        handle.remove();
-        this.handles.delete(name);
-        removed.push(name);
-      }
+      if (meta.get(name) === this.handleMeta.get(name)) continue;
+      handle.remove();
+      this.handles.delete(name);
+      this.handleMeta.delete(name);
+      removed.push(name);
     }
     const added: string[] = [];
     for (const tool of selected) {
@@ -79,6 +97,7 @@ export class ToolProjector {
       const handle = this.registerDynamic(tool);
       if (handle) {
         this.handles.set(name, handle);
+        this.handleMeta.set(name, meta.get(name) ?? "");
         added.push(name);
       }
     }
@@ -118,7 +137,10 @@ export class ToolProjector {
       }
       const key = sourceKey(source.adapterId, source.sourceId);
       const used = perSource.get(key) ?? 0;
-      if (used >= this.runtime.limits.maxToolsPerSource || selected.length >= this.runtime.limits.maxToolsTotal) {
+      if (
+        used >= this.runtime.limits.maxToolsPerSource ||
+        selected.length >= this.runtime.limits.maxToolsTotal
+      ) {
         omitted += 1;
         continue;
       }
@@ -151,7 +173,9 @@ export class ToolProjector {
             },
             {
               signal: ctx.mcpReq.signal,
-              deadline: Date.now() + (this.config.runtime.invocationDeadlineMs ?? DEFAULT_INVOCATION_DEADLINE_MS),
+              deadline:
+                Date.now() +
+                (this.config.runtime.invocationDeadlineMs ?? DEFAULT_INVOCATION_DEADLINE_MS),
             },
           );
           return mapInvokeResult(result) as CallToolResult;
@@ -166,6 +190,11 @@ export class ToolProjector {
       return undefined;
     }
   }
+}
+
+/** Same-name tools must re-register when page metadata changes, not only on rename. */
+function toolMetaKey(tool: RuntimeTool): string {
+  return JSON.stringify([tool.description ?? "", tool.inputSchema ?? {}, tool.annotations ?? {}]);
 }
 
 function asJsonSchema(schema: Record<string, unknown>): ReturnType<typeof fromJsonSchema> {

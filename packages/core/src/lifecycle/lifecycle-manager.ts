@@ -17,6 +17,11 @@ interface SourceCursor {
   revision: number;
 }
 
+interface AdapterSnapshot {
+  sources: BrowserSource[];
+  toolsBySource: Map<string, RuntimeTool[]>;
+}
+
 export class LifecycleManager {
   private readonly last = new Map<string, SourceCursor>();
   private readonly unsubscribers = new Map<string, () => void>();
@@ -79,18 +84,45 @@ export class LifecycleManager {
   }
 
   private async reconcile(adapter: BrowserAdapter, buffered: BrowserAdapterEvent[]): Promise<void> {
-    const listed = await adapter.listSources();
-    for (const source of listed) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const bufferedBefore = buffered.length;
+      const snapshot = await this.captureSnapshot(adapter);
+      if (buffered.length !== bufferedBefore) continue;
+
+      // Every event in this prefix happened before the stable snapshot, so the
+      // snapshot already includes it. Retaining its highest revision prevents
+      // attach() from replaying stale state over the snapshot.
+      const covered = buffered.splice(0, bufferedBefore);
+      this.applySnapshot(adapter.adapterId, snapshot, covered);
+      return;
+    }
+    throw new Error(`adapter ${adapter.adapterId} did not stabilize while attaching`);
+  }
+
+  private async captureSnapshot(adapter: BrowserAdapter): Promise<AdapterSnapshot> {
+    const sources = await adapter.listSources();
+    const toolsBySource = new Map<string, RuntimeTool[]>();
+    for (const source of sources) {
+      toolsBySource.set(source.sourceId, await adapter.listTools(source.sourceId));
+    }
+    return { sources, toolsBySource };
+  }
+
+  private applySnapshot(
+    adapterId: string,
+    snapshot: AdapterSnapshot,
+    covered: BrowserAdapterEvent[],
+  ): void {
+    for (const source of snapshot.sources) {
       const maxRevision = Math.max(
         0,
-        ...buffered
+        ...covered
           .filter((event) => event.sourceId === source.sourceId)
           .map((event) => event.revision),
       );
       this.upsertSource(source, maxRevision);
-      const tools = await adapter.listTools(source.sourceId);
-      for (const tool of tools) {
-        this.upsertTool(adapter.adapterId, tool, maxRevision);
+      for (const tool of snapshot.toolsBySource.get(source.sourceId) ?? []) {
+        this.upsertTool(adapterId, tool, maxRevision);
       }
     }
   }

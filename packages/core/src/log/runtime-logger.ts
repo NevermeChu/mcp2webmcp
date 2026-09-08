@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   LOG_LEVEL_RANK,
@@ -54,19 +54,39 @@ export class RuntimeLogger implements RuntimeLog {
     }
   }
 
-  info(hop: LogHop, event: string, data?: Record<string, unknown>, extra?: { message?: string; traceId?: string }): void {
+  info(
+    hop: LogHop,
+    event: string,
+    data?: Record<string, unknown>,
+    extra?: { message?: string; traceId?: string },
+  ): void {
     this.write({ level: "info", hop, event, data, ...extra });
   }
 
-  warn(hop: LogHop, event: string, data?: Record<string, unknown>, extra?: { message?: string; traceId?: string }): void {
+  warn(
+    hop: LogHop,
+    event: string,
+    data?: Record<string, unknown>,
+    extra?: { message?: string; traceId?: string },
+  ): void {
     this.write({ level: "warn", hop, event, data, ...extra });
   }
 
-  error(hop: LogHop, event: string, data?: Record<string, unknown>, extra?: { message?: string; traceId?: string }): void {
+  error(
+    hop: LogHop,
+    event: string,
+    data?: Record<string, unknown>,
+    extra?: { message?: string; traceId?: string },
+  ): void {
     this.write({ level: "error", hop, event, data, ...extra });
   }
 
-  debug(hop: LogHop, event: string, data?: Record<string, unknown>, extra?: { message?: string; traceId?: string }): void {
+  debug(
+    hop: LogHop,
+    event: string,
+    data?: Record<string, unknown>,
+    extra?: { message?: string; traceId?: string },
+  ): void {
     this.write({ level: "debug", hop, event, data, ...extra });
   }
 
@@ -109,7 +129,9 @@ function rotateIfNeeded(path: string, maxBytes: number, nextBytes: number): void
   try {
     const size = statSync(path).size;
     if (size + nextBytes <= maxBytes) return;
-    renameSync(path, `${path}.1`);
+    const backupPath = `${path}.1`;
+    rmSync(backupPath, { force: true });
+    renameSync(path, backupPath);
   } catch {
     // missing file is fine
   }

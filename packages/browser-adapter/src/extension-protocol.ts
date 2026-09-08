@@ -6,10 +6,12 @@ import {
   type LogLevel,
   type ToolAnnotations,
 } from "@mcp2webmcp/protocol";
+import { stripPageAnnotations } from "./page-annotations.js";
 
 export const EXTENSION_PROTOCOL = "mcp2webmcp-extension";
-export const EXTENSION_PROTOCOL_VERSION = 1;
+export const EXTENSION_PROTOCOL_VERSION = 2;
 export const DEFAULT_EXTENSION_PORT = 9334;
+export const MAX_EXTENSION_TOOLS_PER_SNAPSHOT = 500;
 
 export type ExtensionSourceReason = "connect" | "navigate" | "reload";
 
@@ -25,6 +27,7 @@ export type ExtensionClientMessage =
       type: "hello";
       protocol: typeof EXTENSION_PROTOCOL;
       protocolVersion: number;
+      token: string;
     }
   | {
       type: "source.upsert";
@@ -50,10 +53,11 @@ export type ExtensionClientMessage =
       type: "invokeResult";
       requestId: string;
       sourceId: string;
+      sourceGeneration: number;
       content: unknown[];
       structuredContent?: unknown;
       isError?: boolean;
-      error?: { message: string };
+      error?: { message: string; code?: "OUTCOME_UNKNOWN" };
     }
   | { type: "ping"; id: string }
   | { type: "pong"; id: string }
@@ -74,15 +78,17 @@ export type ExtensionServerMessage =
       protocolVersion: number;
       adapterId: string;
     }
+  | { type: "sourceAck"; sourceId: string; sourceGeneration: number }
   | {
       type: "invoke";
       requestId: string;
       sourceId: string;
+      sourceGeneration: number;
       originalName: string;
       args?: unknown;
       deadline?: number;
     }
-  | { type: "invokeCancel"; requestId: string; sourceId: string }
+  | { type: "invokeCancel"; requestId: string; sourceId: string; sourceGeneration: number }
   | { type: "ping"; id: string }
   | { type: "pong"; id: string };
 
@@ -102,10 +108,14 @@ export function parseExtensionClientMessage(raw: string): ExtensionClientMessage
     if (msg.protocol !== EXTENSION_PROTOCOL || typeof msg.protocolVersion !== "number") {
       return undefined;
     }
+    if (typeof msg.token !== "string" || msg.token.length === 0 || msg.token.length > 512) {
+      return undefined;
+    }
     return {
       type: "hello",
       protocol: EXTENSION_PROTOCOL,
       protocolVersion: msg.protocolVersion,
+      token: msg.token,
     };
   }
   if (type === "source.upsert") {
@@ -136,7 +146,13 @@ export function parseExtensionClientMessage(raw: string): ExtensionClientMessage
     return { type: "source.remove", sourceId: msg.sourceId };
   }
   if (type === "tools.replace") {
-    if (typeof msg.sourceId !== "string" || !Array.isArray(msg.tools)) return undefined;
+    if (
+      typeof msg.sourceId !== "string" ||
+      !Array.isArray(msg.tools) ||
+      msg.tools.length > MAX_EXTENSION_TOOLS_PER_SNAPSHOT
+    ) {
+      return undefined;
+    }
     const tools: ExtensionToolSnapshot[] = [];
     for (const item of msg.tools) {
       const tool = sanitizeTool(item);
@@ -151,18 +167,34 @@ export function parseExtensionClientMessage(raw: string): ExtensionClientMessage
     };
   }
   if (type === "invokeResult") {
-    if (typeof msg.requestId !== "string" || typeof msg.sourceId !== "string") return undefined;
+    if (
+      typeof msg.requestId !== "string" ||
+      typeof msg.sourceId !== "string" ||
+      !Number.isInteger(msg.sourceGeneration) ||
+      (msg.sourceGeneration as number) < 0
+    ) {
+      return undefined;
+    }
     const content = Array.isArray(msg.content) ? msg.content : [];
     return {
       type: "invokeResult",
       requestId: msg.requestId,
       sourceId: msg.sourceId,
+      sourceGeneration: msg.sourceGeneration as number,
       content,
       structuredContent: msg.structuredContent,
       isError: Boolean(msg.isError),
       error:
-        msg.error && typeof msg.error === "object" && typeof (msg.error as { message?: unknown }).message === "string"
-          ? { message: (msg.error as { message: string }).message }
+        msg.error &&
+        typeof msg.error === "object" &&
+        typeof (msg.error as { message?: unknown }).message === "string"
+          ? {
+              message: (msg.error as { message: string }).message,
+              code:
+                (msg.error as { code?: unknown }).code === "OUTCOME_UNKNOWN"
+                  ? "OUTCOME_UNKNOWN"
+                  : undefined,
+            }
           : undefined,
     };
   }
@@ -196,22 +228,11 @@ function sanitizeTool(item: unknown): ExtensionToolSnapshot | undefined {
     tool.inputSchema && typeof tool.inputSchema === "object" && !Array.isArray(tool.inputSchema)
       ? (tool.inputSchema as Record<string, unknown>)
       : { type: "object", properties: {} };
-  const annotations = sanitizeAnnotations(tool.annotations);
+  const annotations = stripPageAnnotations(tool.annotations);
   return {
     originalName,
     description: typeof tool.description === "string" ? tool.description : undefined,
     inputSchema,
     annotations,
   };
-}
-
-function sanitizeAnnotations(value: unknown): ToolAnnotations | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const raw = value as Record<string, unknown>;
-  const annotations: ToolAnnotations = {};
-  if (typeof raw.readOnlyHint === "boolean") annotations.readOnlyHint = raw.readOnlyHint;
-  if (typeof raw.destructiveHint === "boolean") annotations.destructiveHint = raw.destructiveHint;
-  if (typeof raw.idempotentHint === "boolean") annotations.idempotentHint = raw.idempotentHint;
-  if (typeof raw.openWorldHint === "boolean") annotations.openWorldHint = raw.openWorldHint;
-  return Object.keys(annotations).length > 0 ? annotations : undefined;
 }

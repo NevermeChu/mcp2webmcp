@@ -19,7 +19,8 @@ const I18N = {
     runtime_active: "Runtime 就绪",
     runtime_none: "无 Runtime",
     page_tools_title: "页面已暴露工具",
-    empty_tools: "当前页面暂无注册工具。<br>点击上方 <strong>拾取页面元素生成工具</strong>，可将网页按钮或表单转化为 AI 工具。",
+    empty_tools:
+      "当前页面暂无注册工具。<br>点击上方 <strong>拾取页面元素生成工具</strong>，可将网页按钮或表单转化为 AI 工具。",
     tag_destructive: "破坏性",
     tag_readonly: "只读",
     tag_idempotent: "幂等",
@@ -33,6 +34,10 @@ const I18N = {
     no_other_tabs: "无其他打开的 WebMCP 页面。",
     switch_tab: "切换",
     pick_error_fallback: "无法启动拾取器，请刷新页面后重试。",
+    auth_settings: "Gateway 鉴权令牌",
+    auth_hint: "必填；须与 Gateway 的 browser.extension.authToken 或环境变量一致。保存后自动重连。",
+    auth_saved: "已保存，重连中…",
+    auth_cleared: "已清除",
     lang_btn: "EN",
   },
   en: {
@@ -55,7 +60,8 @@ const I18N = {
     runtime_active: "Runtime Active",
     runtime_none: "No Runtime",
     page_tools_title: "Page Tools",
-    empty_tools: "No tools registered on this page yet.<br>Click <strong>Pick Element to Tool</strong> above to expose buttons or forms to AI.",
+    empty_tools:
+      "No tools registered on this page yet.<br>Click <strong>Pick Element to Tool</strong> above to expose buttons or forms to AI.",
     tag_destructive: "Destructive",
     tag_readonly: "ReadOnly",
     tag_idempotent: "Idempotent",
@@ -69,6 +75,11 @@ const I18N = {
     no_other_tabs: "No other WebMCP tabs open.",
     switch_tab: "Switch",
     pick_error_fallback: "Could not start element picker. Please refresh the page.",
+    auth_settings: "Gateway Auth Token",
+    auth_hint:
+      "Required; must match browser.extension.authToken or MCP2WEBMCP_EXTENSION_TOKEN. Saving reconnects automatically.",
+    auth_saved: "Saved, reconnecting…",
+    auth_cleared: "Cleared",
     lang_btn: "中",
   },
 };
@@ -131,7 +142,9 @@ function renderGatewayStatus(status) {
     if (banner) banner.hidden = false;
   } else {
     pill.className = "status-pill connected";
-    text.textContent = status.gateway ? status.gateway.replace(/^ws:\/\//, "") : t("status_connected");
+    text.textContent = status.gateway
+      ? status.gateway.replace(/^ws:\/\//, "")
+      : t("status_connected");
     if (banner) banner.hidden = true;
   }
 }
@@ -182,7 +195,8 @@ function renderActiveTab(activeTab) {
       const isIdempotent = Boolean(tool.annotations?.idempotentHint);
 
       let badges = "";
-      if (isDestructive) badges += `<span class="tag tag-destructive">${t("tag_destructive")}</span>`;
+      if (isDestructive)
+        badges += `<span class="tag tag-destructive">${t("tag_destructive")}</span>`;
       if (isReadOnly) badges += `<span class="tag tag-readonly">${t("tag_readonly")}</span>`;
       if (isIdempotent) badges += `<span class="tag tag-idempotent">${t("tag_idempotent")}</span>`;
 
@@ -333,7 +347,7 @@ applyStaticI18n();
 fetchStatus();
 
 // Polling interval
-const timer = setInterval(fetchStatus, 2000);
+setInterval(fetchStatus, 2000);
 
 // Reactive updates
 chrome.runtime.onMessage.addListener((message) => {
@@ -360,9 +374,7 @@ document.getElementById("register-tool")?.addEventListener("click", () => {
       if (errorEl) {
         errorEl.hidden = false;
         errorEl.textContent =
-          result?.error ||
-          chrome.runtime.lastError?.message ||
-          t("pick_error_fallback");
+          result?.error || chrome.runtime.lastError?.message || t("pick_error_fallback");
       }
     }
   });
@@ -392,4 +404,35 @@ document.getElementById("copy-cmd-btn")?.addEventListener("click", () => {
       }, 1500);
     }
   });
+});
+
+// Action: Gateway auth token (background reconnects via storage.onChanged)
+const tokenInput = document.getElementById("auth-token-input");
+const tokenStatus = document.getElementById("auth-token-status");
+try {
+  chrome.storage?.local?.get("gatewayAuthToken", (stored) => {
+    const token = stored?.gatewayAuthToken;
+    if (typeof token === "string" && tokenInput) tokenInput.value = token;
+  });
+} catch {
+  // storage unavailable (e.g. non-extension context); leave the field empty
+}
+document.getElementById("auth-token-save")?.addEventListener("click", () => {
+  const value = (tokenInput?.value ?? "").trim();
+  try {
+    if (value) void chrome.storage?.local?.set({ gatewayAuthToken: value });
+    else void chrome.storage?.local?.remove("gatewayAuthToken");
+    if (tokenStatus) tokenStatus.textContent = t("auth_saved");
+  } catch {
+    if (tokenStatus) tokenStatus.textContent = "storage error";
+  }
+});
+document.getElementById("auth-token-clear")?.addEventListener("click", () => {
+  if (tokenInput) tokenInput.value = "";
+  try {
+    void chrome.storage?.local?.remove("gatewayAuthToken");
+    if (tokenStatus) tokenStatus.textContent = t("auth_cleared");
+  } catch {
+    if (tokenStatus) tokenStatus.textContent = "storage error";
+  }
 });

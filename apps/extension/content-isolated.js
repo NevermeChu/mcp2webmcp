@@ -53,17 +53,20 @@ window.addEventListener("message", (event) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "invoke") {
     const requestId = message.requestId;
-    const timer = setTimeout(() => {
-      if (pending.has(requestId)) {
-        pending.delete(requestId);
-        sendResponse({
-          requestId,
-          content: [{ type: "text", text: "invocation timeout" }],
-          isError: true,
-          error: { message: "invocation timeout" },
-        });
-      }
-    }, Math.max(1, (message.deadline ?? Date.now() + 60_000) - Date.now()));
+    const timer = setTimeout(
+      () => {
+        if (pending.has(requestId)) {
+          pending.delete(requestId);
+          sendResponse({
+            requestId,
+            content: [{ type: "text", text: "invocation timeout" }],
+            isError: true,
+            error: { message: "invocation timeout" },
+          });
+        }
+      },
+      Math.max(1, (message.deadline ?? Date.now() + 60_000) - Date.now()),
+    );
     pending.set(requestId, (result) => {
       clearTimeout(timer);
       sendResponse({
@@ -80,6 +83,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         direction: "isolated-to-page",
         kind: "invoke",
         requestId,
+        sourceGeneration: message.sourceGeneration,
+        pageInstanceId: message.pageInstanceId,
         originalName: message.originalName,
         args: message.args,
         deadline: message.deadline,
@@ -95,6 +100,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         direction: "isolated-to-page",
         kind: "invokeCancel",
         requestId: message.requestId,
+        sourceGeneration: message.sourceGeneration,
       },
       window.location.origin,
     );
@@ -215,18 +221,32 @@ function startPick() {
   document.documentElement.style.cursor = "crosshair";
   pickUi = { host, shadow, highlight, tooltip, banner };
 
+  // pointerdown capture only. Binding again on click double-binds the element.
   document.addEventListener("mousemove", onPickMove, true);
   document.addEventListener("pointerdown", onPickClick, true);
-  document.addEventListener("click", onPickClick, true);
+  document.addEventListener("click", onPickClickSuppress, true);
   document.addEventListener("keydown", onPickKey, true);
   document.addEventListener("scroll", onPickScroll, true);
+}
+
+/**
+ * While picking, swallow trusted clicks so highlighting an element does not
+ * activate it. Registered tools dispatch synthetic el.click() events
+ * (isTrusted=false) which must still reach the page — the picker stays open
+ * across invocations.
+ */
+function onPickClickSuppress(event) {
+  if (!event.isTrusted) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
 }
 
 function stopPick() {
   if (!pickUi) return;
   document.removeEventListener("mousemove", onPickMove, true);
   document.removeEventListener("pointerdown", onPickClick, true);
-  document.removeEventListener("click", onPickClick, true);
+  document.removeEventListener("click", onPickClickSuppress, true);
   document.removeEventListener("keydown", onPickKey, true);
   document.removeEventListener("scroll", onPickScroll, true);
   pickUi.host.remove();
@@ -237,7 +257,9 @@ function stopPick() {
 }
 
 function isPickerHost(node) {
-  return Boolean(node && (node.id === "mcp2webmcp-picker-host" || node.closest?.("#mcp2webmcp-picker-host")));
+  return Boolean(
+    node && (node.id === "mcp2webmcp-picker-host" || node.closest?.("#mcp2webmcp-picker-host")),
+  );
 }
 
 function bindableFromPoint(x, y) {
@@ -316,7 +338,8 @@ function onPickClick(event) {
   if (!pickUi) return;
   if (isPickerHost(event.target)) return;
   const picker = globalThis.mcp2webmcpPicker;
-  const el = bindableFromPoint(event.clientX, event.clientY) || picker.closestBindable(event.target);
+  const el =
+    bindableFromPoint(event.clientX, event.clientY) || picker.closestBindable(event.target);
   if (!el) return;
   event.preventDefault();
   event.stopPropagation();

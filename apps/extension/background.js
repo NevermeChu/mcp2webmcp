@@ -1,5 +1,7 @@
+import { applyPageSnapshot, originFromTabUrl, sourceIdFor } from "./background-core.js";
+
 const PROTOCOL = "mcp2webmcp-extension";
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 const DEFAULT_PORT = 9334;
 
 /** @type {number} */
@@ -28,9 +30,7 @@ let pingSeq = 0;
 /** @type {Map<number, TabState>} */
 const tabs = new Map();
 
-chrome.sidePanel
-  ?.setPanelBehavior?.({ openPanelOnActionClick: true })
-  ?.catch?.(() => {});
+chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true })?.catch?.(() => {});
 
 let socketGeneration = 0;
 /** @type {Array<Record<string, unknown>>} */
@@ -83,8 +83,12 @@ function updateBadge() {
       if (activeTab?.id && tabs.has(activeTab.id)) {
         const count = tabs.get(activeTab.id)?.tools?.length ?? 0;
         chrome.action.setBadgeText({ text: count > 0 ? String(count) : "0" }).catch?.(() => {});
-        chrome.action.setBadgeBackgroundColor({ color: count > 0 ? "#10b981" : "#64748b" }).catch?.(() => {});
-        chrome.action.setTitle({ title: `WebMCP Gateway: Connected (${count} tools)` }).catch?.(() => {});
+        chrome.action
+          .setBadgeBackgroundColor({ color: count > 0 ? "#10b981" : "#64748b" })
+          .catch?.(() => {});
+        chrome.action
+          .setTitle({ title: `WebMCP Gateway: Connected (${count} tools)` })
+          .catch?.(() => {});
       } else {
         chrome.action.setBadgeText({ text: "" }).catch?.(() => {});
         chrome.action.setTitle({ title: "WebMCP Gateway: Connected" }).catch?.(() => {});
@@ -104,20 +108,6 @@ globalThis.mcp2webmcpSetGatewayPort = (port) => {
   gatewayPort = next;
   connect();
 };
-
-function sourceIdFor(tabId) {
-  return `tab:${tabId}`;
-}
-
-function originFromTabUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
-    return parsed.origin;
-  } catch {
-    return undefined;
-  }
-}
 
 function send(message) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -147,6 +137,20 @@ function flushLogs() {
 }
 
 function connect() {
+  void readAuthToken().then((authToken) => openSocket(authToken));
+}
+
+async function readAuthToken() {
+  try {
+    const stored = await chrome.storage?.local?.get("gatewayAuthToken");
+    const token = stored?.gatewayAuthToken;
+    return typeof token === "string" && token.length > 0 ? token : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function openSocket(authToken) {
   const generation = ++socketGeneration;
   helloOk = false;
   if (pingTimer) clearInterval(pingTimer);
@@ -169,6 +173,7 @@ function connect() {
         type: "hello",
         protocol: PROTOCOL,
         protocolVersion: PROTOCOL_VERSION,
+        ...(authToken ? { token: authToken } : {}),
       }),
     );
   };
@@ -205,6 +210,14 @@ function connect() {
       return;
     }
     if (!helloOk) return;
+    if (message.type === "sourceAck") {
+      const tabId = Number(String(message.sourceId ?? "").replace(/^tab:/, ""));
+      const state = tabs.get(tabId);
+      if (state && Number.isInteger(message.sourceGeneration) && message.sourceGeneration >= 0) {
+        state.generation = message.sourceGeneration;
+      }
+      return;
+    }
     if (message.type === "ping") {
       send({ type: "pong", id: message.id });
       return;
@@ -216,7 +229,9 @@ function connect() {
     if (message.type === "invokeCancel") {
       const tabId = Number(String(message.sourceId ?? "").replace(/^tab:/, ""));
       if (Number.isInteger(tabId)) {
-        void chrome.tabs.sendMessage(tabId, { type: "invokeCancel", requestId: message.requestId }).catch(() => undefined);
+        void chrome.tabs
+          .sendMessage(tabId, { type: "invokeCancel", requestId: message.requestId })
+          .catch(() => undefined);
       }
     }
   };
@@ -264,6 +279,12 @@ function removeTab(tabId) {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   removeTab(tabId);
+});
+
+chrome.storage?.onChanged?.addListener((changes, area) => {
+  if (area === "local" && Object.hasOwn(changes, "gatewayAuthToken")) {
+    connect();
+  }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -368,62 +389,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const origin = originFromTabUrl(tab.url);
   if (!origin) return undefined;
   const tabId = tab.id;
-  const existing = tabs.get(tabId);
-  const pageInstanceId = typeof message.pageInstanceId === "string" ? message.pageInstanceId : undefined;
-  const tools = Array.isArray(message.tools) ? message.tools : [];
-  if (!existing) {
-    const state = {
-      origin,
-      url: tab.url,
-      title: tab.title,
-      pageInstanceId,
-      runtimePresent: Boolean(message.runtimePresent),
-      runtimeError: message.runtimeError,
-      tools,
-      generation: 1,
-    };
-    tabs.set(tabId, state);
-    gatewayLog("page.snapshot", {
-      tabId,
-      origin,
-      count: tools.length,
-      names: tools.map((tool) => (tool && typeof tool.originalName === "string" ? tool.originalName : "")).filter(Boolean),
-      runtimePresent: state.runtimePresent,
-      runtimeError: state.runtimeError,
-      reason: "connect",
-    });
-    upsert(tabId, state, "connect");
-    sendTools(tabId, state);
-    updateBadge();
-    notifyExtensionPages({ type: "state.updated" });
-    return undefined;
-  }
-  const reload = pageInstanceId && existing.pageInstanceId && pageInstanceId !== existing.pageInstanceId;
-  const navigated = existing.origin !== origin || existing.url !== tab.url;
-  existing.origin = origin;
-  existing.url = tab.url;
-  existing.title = tab.title;
-  existing.runtimePresent = Boolean(message.runtimePresent);
-  existing.runtimeError = message.runtimeError;
-  existing.tools = tools;
+  const merged = applyPageSnapshot(tabs.get(tabId), {
+    origin,
+    url: tab.url,
+    title: tab.title,
+    pageInstanceId: typeof message.pageInstanceId === "string" ? message.pageInstanceId : undefined,
+    tools: Array.isArray(message.tools) ? message.tools : [],
+    runtimePresent: Boolean(message.runtimePresent),
+    runtimeError: message.runtimeError,
+  });
+  tabs.set(tabId, merged.state);
+  const state = merged.state;
   gatewayLog("page.snapshot", {
     tabId,
     origin,
-    count: tools.length,
-    names: tools.map((tool) => (tool && typeof tool.originalName === "string" ? tool.originalName : "")).filter(Boolean),
-    runtimePresent: existing.runtimePresent,
-    runtimeError: existing.runtimeError,
-    reload: Boolean(reload),
-    navigated,
+    count: Array.isArray(state.tools) ? state.tools.length : 0,
+    names: (Array.isArray(state.tools) ? state.tools : [])
+      .map((tool) => (tool && typeof tool.originalName === "string" ? tool.originalName : ""))
+      .filter(Boolean),
+    runtimePresent: state.runtimePresent,
+    runtimeError: state.runtimeError,
+    reason: merged.reason,
   });
-  if (reload || navigated) {
-    existing.generation += 1;
-    existing.pageInstanceId = pageInstanceId;
-    upsert(tabId, existing, reload ? "reload" : "navigate");
-  } else if (!existing.pageInstanceId && pageInstanceId) {
-    existing.pageInstanceId = pageInstanceId;
+  if (merged.kind !== "update") {
+    upsert(tabId, state, merged.reason);
   }
-  sendTools(tabId, existing);
+  sendTools(tabId, state);
   updateBadge();
   notifyExtensionPages({ type: "state.updated" });
   return undefined;
@@ -465,37 +456,44 @@ async function handleInvoke(message) {
     { traceId: message.requestId },
   );
   if (!Number.isInteger(tabId) || tabId < 0) {
-    const errorMsg = "invalid sourceId";
-    recordInvocation({
-      id: message.requestId,
-      timestamp: Date.now(),
-      tabId,
-      originalName: message.originalName,
-      args: message.args,
-      durationMs: Date.now() - startedAt,
-      isError: true,
-      error: errorMsg,
-    });
-    send({
-      type: "invokeResult",
-      requestId: message.requestId,
-      sourceId: message.sourceId,
-      content: [{ type: "text", text: errorMsg }],
-      isError: true,
-      error: { message: errorMsg },
-    });
+    sendInvokeError(message, tabId, startedAt, "invalid sourceId");
+    return;
+  }
+  const state = tabs.get(tabId);
+  if (!state || state.generation !== message.sourceGeneration || !state.pageInstanceId) {
+    sendInvokeError(message, tabId, startedAt, "stale source generation");
     return;
   }
   try {
     const result = await chrome.tabs.sendMessage(tabId, {
       type: "invoke",
       requestId: message.requestId,
+      sourceGeneration: message.sourceGeneration,
+      pageInstanceId: state.pageInstanceId,
       originalName: message.originalName,
       args: message.args,
       deadline: message.deadline,
     });
+    const current = tabs.get(tabId);
+    if (
+      !current ||
+      current.generation !== message.sourceGeneration ||
+      current.pageInstanceId !== state.pageInstanceId
+    ) {
+      sendInvokeError(
+        message,
+        tabId,
+        startedAt,
+        "page changed while invocation was in flight; outcome is unknown",
+        "OUTCOME_UNKNOWN",
+      );
+      return;
+    }
     const durationMs = Date.now() - startedAt;
-    const textPreview = typeof result?.content?.[0]?.text === "string" ? result.content[0].text.slice(0, 150) : undefined;
+    const textPreview =
+      typeof result?.content?.[0]?.text === "string"
+        ? result.content[0].text.slice(0, 150)
+        : undefined;
     recordInvocation({
       id: message.requestId,
       timestamp: Date.now(),
@@ -511,6 +509,7 @@ async function handleInvoke(message) {
       type: "invokeResult",
       requestId: message.requestId,
       sourceId: message.sourceId,
+      sourceGeneration: message.sourceGeneration,
       content: result?.content ?? [],
       structuredContent: result?.structuredContent,
       isError: Boolean(result?.isError),
@@ -543,11 +542,34 @@ async function handleInvoke(message) {
       type: "invokeResult",
       requestId: message.requestId,
       sourceId: message.sourceId,
+      sourceGeneration: message.sourceGeneration,
       content: [{ type: "text", text: errorMsg }],
       isError: true,
       error: { message: errorMsg },
     });
   }
+}
+
+function sendInvokeError(message, tabId, startedAt, errorMsg, errorCode) {
+  recordInvocation({
+    id: message.requestId,
+    timestamp: Date.now(),
+    tabId,
+    originalName: message.originalName,
+    args: message.args,
+    durationMs: Date.now() - startedAt,
+    isError: true,
+    error: errorMsg,
+  });
+  send({
+    type: "invokeResult",
+    requestId: message.requestId,
+    sourceId: message.sourceId,
+    sourceGeneration: message.sourceGeneration,
+    content: [{ type: "text", text: errorMsg }],
+    isError: true,
+    error: { message: errorMsg, ...(errorCode ? { code: errorCode } : {}) },
+  });
 }
 
 connect();

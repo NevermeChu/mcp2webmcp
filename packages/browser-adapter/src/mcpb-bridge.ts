@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { RelayBridgeServer } from "@mcp-b/webmcp-local-relay";
 import type { ToolAnnotations } from "@mcp2webmcp/protocol";
 import { assertExplicitOrigins, assertLoopbackHost, normalizeLoopbackHost } from "./mcpb-safety.js";
+import { stripPageAnnotations } from "./page-annotations.js";
 
 export interface McpbRelaySnapshotSource {
   sourceId: string;
@@ -116,8 +117,11 @@ function snapshotFromRelay(inner: RelayBridgeServer): McpbRelaySnapshot {
         invokeName: tool.name,
         originalName: pageOriginalName(tool.name, tool.name),
         description: tool.description,
-        inputSchema: (tool.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
-        annotations: tool.annotations,
+        inputSchema: (tool.inputSchema ?? { type: "object", properties: {} }) as Record<
+          string,
+          unknown
+        >,
+        annotations: stripPageAnnotations(tool.annotations),
         sourceIds: sourceMap[tool.name] ?? [],
       })),
     };
@@ -136,8 +140,11 @@ function snapshotFromRelay(inner: RelayBridgeServer): McpbRelaySnapshot {
       invokeName: tool.name,
       originalName: pageOriginalName(tool.originalName, tool.name),
       description: tool.description,
-      inputSchema: (tool.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
-      annotations: tool.annotations,
+      inputSchema: (tool.inputSchema ?? { type: "object", properties: {} }) as Record<
+        string,
+        unknown
+      >,
+      annotations: stripPageAnnotations(tool.annotations),
       sourceIds: tool.sources.map((source) => source.sourceId),
     })),
   };

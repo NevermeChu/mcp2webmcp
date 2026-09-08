@@ -98,14 +98,16 @@ export function createManagementHandlers(
         },
         {
           signal: new AbortController().signal,
-          deadline: Date.now() + (config.runtime.invocationDeadlineMs ?? DEFAULT_INVOCATION_DEADLINE_MS),
+          deadline:
+            Date.now() + (config.runtime.invocationDeadlineMs ?? DEFAULT_INVOCATION_DEADLINE_MS),
         },
       );
       return mapInvokeResult(result);
     },
 
     async recentLogs(input: { limit?: number } = {}) {
-      const limit = typeof input.limit === "number" && Number.isFinite(input.limit) ? input.limit : 80;
+      const limit =
+        typeof input.limit === "number" && Number.isFinite(input.limit) ? input.limit : 80;
       return jsonText({
         path: runtime.log.path,
         records: runtime.log.recent(limit),
@@ -134,27 +136,6 @@ export function createManagementHandlers(
         };
       }
       const changed = runtime.consent.revoke(input.origin, input.tool);
-      if (changed) runtime.events.publish({ type: "consent.updated" });
-      return jsonText({
-        changed,
-        origins: runtime.consent.list(),
-      });
-    },
-
-    async restoreConsent(input: { origin?: string; tool?: string }) {
-      if (!runtime.consent.enabled) {
-        return {
-          content: [{ type: "text", text: "INVALID_INPUT: consent is disabled" }],
-          isError: true,
-        };
-      }
-      if (!input.origin) {
-        return {
-          content: [{ type: "text", text: "INVALID_INPUT: origin is required" }],
-          isError: true,
-        };
-      }
-      const changed = runtime.consent.restore(input.origin, input.tool);
       if (changed) runtime.events.publish({ type: "consent.updated" });
       return jsonText({
         changed,

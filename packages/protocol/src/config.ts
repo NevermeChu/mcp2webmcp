@@ -14,7 +14,6 @@ export interface ResourceLimits {
   maxSchemaBytes: number;
   maxQueuePerSource: number;
   maxSchemaDepth: number;
-  schemaCompileTimeoutMs: number;
 }
 
 export interface RuntimeConfig {
@@ -48,6 +47,10 @@ export interface ExtensionAdapterConfig {
   host?: string;
   port?: number;
   invokeTimeoutMs?: number;
+  /** Required by the Gateway when adapter=extension; the hello must carry it. */
+  authToken?: string;
+  /** How long a dropped WebSocket keeps its sources before they are removed. */
+  disconnectGraceMs?: number;
 }
 
 /** Relay bind settings for the MCP-B adapter. Types stay generic so Core never imports MCP-B. */
@@ -69,5 +72,4 @@ export const defaultResourceLimits: ResourceLimits = {
   maxSchemaBytes: 262_144,
   maxQueuePerSource: 16,
   maxSchemaDepth: 32,
-  schemaCompileTimeoutMs: 50,
 };

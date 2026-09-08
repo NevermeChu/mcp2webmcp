@@ -100,7 +100,10 @@ export class McpStdioServer {
     );
     this.server.registerTool(
       "webmcp_list_tools",
-      { description: "List discovered WebMCP tools with source metadata (fallback when dynamic refresh is unavailable)" },
+      {
+        description:
+          "List discovered WebMCP tools with source metadata (fallback when dynamic refresh is unavailable)",
+      },
       async () => handlers.listTools(),
     );
     this.server.registerTool(
@@ -135,7 +138,8 @@ export class McpStdioServer {
     this.server.registerTool(
       "webmcp_call_tool",
       {
-        description: "Call a discovered tool by MCP name or runtime id (fallback when dynamic tools are not subscribed)",
+        description:
+          "Call a discovered tool by MCP name or runtime id (fallback when dynamic tools are not subscribed)",
         inputSchema: fromJsonSchema({
           type: "object",
           properties: {
@@ -175,27 +179,6 @@ export class McpStdioServer {
       async (args): Promise<CallToolResult> => {
         const record = asRecord(args);
         return (await handlers.revokeConsent({
-          origin: typeof record.origin === "string" ? record.origin : undefined,
-          tool: typeof record.tool === "string" ? record.tool : undefined,
-        })) as CallToolResult;
-      },
-    );
-    this.server.registerTool(
-      "webmcp_restore_consent",
-      {
-        description: "Re-enable a previously revoked origin or tool",
-        inputSchema: fromJsonSchema({
-          type: "object",
-          properties: {
-            origin: { type: "string" },
-            tool: { type: "string" },
-          },
-          required: ["origin"],
-        } as JsonSchemaType),
-      },
-      async (args): Promise<CallToolResult> => {
-        const record = asRecord(args);
-        return (await handlers.restoreConsent({
           origin: typeof record.origin === "string" ? record.origin : undefined,
           tool: typeof record.tool === "string" ? record.tool : undefined,
         })) as CallToolResult;

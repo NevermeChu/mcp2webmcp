@@ -33,7 +33,10 @@ function snapshotTools() {
   return [...tools.values()].map((entry) => ({
     originalName: entry.originalName,
     description: entry.description,
-    inputSchema: entry.inputSchema && typeof entry.inputSchema === "object" ? entry.inputSchema : { type: "object", properties: {} },
+    inputSchema:
+      entry.inputSchema && typeof entry.inputSchema === "object"
+        ? entry.inputSchema
+        : { type: "object", properties: {} },
     annotations: entry.annotations,
   }));
 }
@@ -159,6 +162,7 @@ window.addEventListener("message", (event) => {
     return;
   }
   if (data.kind === "invoke") {
+    if (data.pageInstanceId !== PAGE_INSTANCE_ID) return;
     void runInvoke(data);
     return;
   }
@@ -180,7 +184,7 @@ function watchPickerSpec() {
     let spec;
     try {
       spec = JSON.parse(raw);
-    } catch (error) {
+    } catch {
       root.setAttribute("data-mcp2webmcp-bind-error", "invalid picker spec json");
       return;
     }
@@ -230,11 +234,12 @@ async function registerFromPicker(spec) {
 }
 
 function uniquePickedName(base, taken) {
-  const root = String(base)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "")
-    .slice(0, 40) || "element";
+  const root =
+    String(base)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 40) || "element";
   if (!taken.has(root)) return root;
   let i = 2;
   while (taken.has(`${root}_${i}`)) i += 1;
@@ -263,7 +268,8 @@ function executePickedBinding(spec, args) {
       el.focus();
       el.textContent = value;
     } else {
-      const proto = el.tagName.toLowerCase() === "textarea" ? HTMLTextAreaElement : HTMLInputElement;
+      const proto =
+        el.tagName.toLowerCase() === "textarea" ? HTMLTextAreaElement : HTMLInputElement;
       const desc = Object.getOwnPropertyDescriptor(proto.prototype, "value");
       if (desc && typeof desc.set === "function") desc.set.call(el, value);
       else el.value = value;
@@ -285,7 +291,8 @@ function executePickedBinding(spec, args) {
 async function runInvoke(data) {
   const controller = new AbortController();
   pendingInvokes.set(data.requestId, controller);
-  const remain = typeof data.deadline === "number" ? Math.max(1, data.deadline - Date.now()) : 60_000;
+  const remain =
+    typeof data.deadline === "number" ? Math.max(1, data.deadline - Date.now()) : 60_000;
   const timer = setTimeout(() => controller.abort(), remain);
   try {
     if (!wrappedContext) {

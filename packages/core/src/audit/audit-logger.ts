@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { chmod } from "node:fs/promises";
 import { dirname } from "node:path";
 import { RuntimeError, type AuditConfig, type AuditRecord } from "@mcp2webmcp/protocol";
@@ -31,6 +31,8 @@ export class AuditLogger {
       return;
     }
     if (size + nextBytes <= this.config.maxBytes) return;
-    renameSync(this.config.path, `${this.config.path}.1`);
+    const backupPath = `${this.config.path}.1`;
+    rmSync(backupPath, { force: true });
+    renameSync(this.config.path, backupPath);
   }
 }

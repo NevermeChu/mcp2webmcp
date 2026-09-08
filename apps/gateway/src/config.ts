@@ -12,11 +12,17 @@ export function expandHome(path: string): string {
   return path;
 }
 
-export function loadConfig(argv = process.argv.slice(2)): RuntimeConfig {
+export function loadConfig(
+  argv = process.argv.slice(2),
+  options: { requireExtensionToken?: boolean } = {},
+): RuntimeConfig {
   const configFlag = flagValue(argv, "--config") ?? process.env.MCP2WEBMCP_CONFIG;
-  const raw = configFlag
-    ? readFileSync(resolve(expandHome(configFlag)), "utf8")
-    : defaultYaml();
+  if (!configFlag) {
+    throw new Error(
+      "config required: pass --config <path-to-yaml> or set MCP2WEBMCP_CONFIG (see configs/example.yaml)",
+    );
+  }
+  const raw = readFileSync(resolve(expandHome(configFlag)), "utf8");
   const parsed = runtimeConfigSchema.parse(parseYaml(raw));
   const logLevel = process.env.MCP2WEBMCP_LOG_LEVEL;
   if (logLevel === "debug" || logLevel === "info" || logLevel === "warn" || logLevel === "error") {
@@ -29,6 +35,11 @@ export function loadConfig(argv = process.argv.slice(2)): RuntimeConfig {
       .map((item) => item.trim())
       .filter(Boolean);
   }
+  const extensionToken = process.env.MCP2WEBMCP_EXTENSION_TOKEN;
+  if (extensionToken) {
+    parsed.browser.extension ??= {};
+    parsed.browser.extension.authToken = extensionToken;
+  }
   const logPath = process.env.MCP2WEBMCP_LOG_PATH || parsed.runtime.logPath;
   const safeName = parsed.runtime.name.replace(/[^a-zA-Z0-9._-]+/g, "_") || "mcp2webmcp";
   parsed.runtime.logPath = expandHome(logPath || `~/.mcp2webmcp/logs/${safeName}.jsonl`);
@@ -37,41 +48,22 @@ export function loadConfig(argv = process.argv.slice(2)): RuntimeConfig {
   if (parsed.browser.mcpb?.persistPath) {
     parsed.browser.mcpb.persistPath = expandHome(parsed.browser.mcpb.persistPath);
   }
-  return parsed;
+  const validated = runtimeConfigSchema.parse(parsed);
+  if (
+    options.requireExtensionToken !== false &&
+    validated.browser.adapter === "extension" &&
+    !validated.browser.extension?.authToken
+  ) {
+    throw new Error(
+      "extension adapter requires browser.extension.authToken or MCP2WEBMCP_EXTENSION_TOKEN",
+    );
+  }
+  return validated;
 }
 
-function flagValue(argv: string[], name: string): string | undefined {
+export function flagValue(argv: string[], name: string): string | undefined {
   const index = argv.indexOf(name);
   if (index >= 0) return argv[index + 1];
   const prefixed = argv.find((item) => item.startsWith(`${name}=`));
   return prefixed?.slice(name.length + 1);
-}
-
-function defaultYaml(): string {
-  return `
-runtime:
-  name: mcp2webmcp
-  logLevel: info
-mcp:
-  stdio:
-    enabled: true
-browser:
-  adapter: fake
-  allowedOrigins:
-    - "https://knowmesh.app"
-policy:
-  default: deny
-  rules:
-    - match:
-        origin: "https://knowmesh.app"
-        tool: "echo"
-      action: allow
-consent:
-  enabled: true
-  autoAdmit: true
-  path: "~/.mcp2webmcp/consent.json"
-audit:
-  enabled: true
-  path: "~/.mcp2webmcp/logs/audit.jsonl"
-`;
 }

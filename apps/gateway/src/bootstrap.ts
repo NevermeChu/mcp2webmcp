@@ -1,4 +1,9 @@
-import { discoveredTool, ExtensionAdapter, FakeBrowserAdapter, McpBAdapter } from "@mcp2webmcp/browser-adapter";
+import {
+  discoveredTool,
+  ExtensionAdapter,
+  FakeBrowserAdapter,
+  McpBAdapter,
+} from "@mcp2webmcp/browser-adapter";
 import { createRuntime } from "@mcp2webmcp/core";
 import { McpStdioServer } from "@mcp2webmcp/mcp-transport";
 import type { BrowserSource, RuntimeConfig } from "@mcp2webmcp/protocol";
@@ -29,12 +34,17 @@ export async function bootstrap(config: RuntimeConfig): Promise<McpStdioServer> 
     );
   } else if (config.browser.adapter === "extension") {
     const extension = config.browser.extension ?? {};
+    if (!extension.authToken) {
+      throw new Error("extension adapter requires browser.extension.authToken");
+    }
     const adapter = new ExtensionAdapter({
       adapterId: "ext-1",
       allowedOrigins: config.browser.allowedOrigins,
       host: extension.host,
       port: extension.port,
       invokeTimeoutMs: extension.invokeTimeoutMs ?? config.runtime.invocationDeadlineMs,
+      authToken: extension.authToken,
+      disconnectGraceMs: extension.disconnectGraceMs,
       log: runtime.log,
     });
     await runtime.attach(adapter);
@@ -53,10 +63,9 @@ export async function bootstrap(config: RuntimeConfig): Promise<McpStdioServer> 
   return new McpStdioServer(runtime, config);
 }
 
-function demoSource(): Omit<
-  BrowserSource,
-  "adapterId" | "adapterType" | "state" | "updatedAt"
-> & { connectedAt: number } {
+function demoSource(): Omit<BrowserSource, "adapterId" | "adapterType" | "state" | "updatedAt"> & {
+  connectedAt: number;
+} {
   const now = Date.now();
   return {
     sourceId: "tab-18",

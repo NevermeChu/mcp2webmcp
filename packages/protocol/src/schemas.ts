@@ -91,13 +91,16 @@ export const runtimeInvokeRequestSchema = z.object({
 
 export const policyRuleSchema = z
   .object({
-    match: z.object({
-      origin: z.string().optional(),
-      tool: z.string().optional(),
-      destructive: z.boolean().optional(),
-    }),
+    match: z
+      .object({
+        origin: z.string().optional(),
+        tool: z.string().optional(),
+        destructive: z.boolean().optional(),
+      })
+      .strict(),
     action: z.enum(["allow", "deny", "confirm"]),
   })
+  .strict()
   .superRefine((rule, ctx) => {
     if (rule.action === "allow" && rule.match.tool?.includes("*")) {
       ctx.addIssue({
@@ -107,10 +110,12 @@ export const policyRuleSchema = z
     }
   });
 
-export const policyConfigSchema = z.object({
-  default: z.enum(["allow", "deny"]).default("deny"),
-  rules: z.array(policyRuleSchema).default([]),
-});
+export const policyConfigSchema = z
+  .object({
+    default: z.enum(["allow", "deny"]).default("deny"),
+    rules: z.array(policyRuleSchema).default([]),
+  })
+  .strict();
 
 export const consentConfigSchema = z
   .object({
@@ -118,82 +123,97 @@ export const consentConfigSchema = z
     autoAdmit: z.boolean().default(defaultConsentConfig.autoAdmit),
     path: z.string().min(1).default(defaultConsentConfig.path),
   })
+  .strict()
   .default(defaultConsentConfig);
 
-export const resourceLimitsSchema = z.object({
-  maxToolsPerSource: z.number().int().positive().default(defaultResourceLimits.maxToolsPerSource),
-  maxToolsTotal: z.number().int().positive().default(defaultResourceLimits.maxToolsTotal),
-  maxInputBytes: z.number().int().positive().default(defaultResourceLimits.maxInputBytes),
-  maxOutputBytes: z.number().int().positive().default(defaultResourceLimits.maxOutputBytes),
-  maxSchemaBytes: z.number().int().positive().default(defaultResourceLimits.maxSchemaBytes),
-  maxQueuePerSource: z.number().int().positive().default(defaultResourceLimits.maxQueuePerSource),
-  maxSchemaDepth: z.number().int().positive().default(defaultResourceLimits.maxSchemaDepth),
-  schemaCompileTimeoutMs: z
-    .number()
-    .int()
-    .positive()
-    .default(defaultResourceLimits.schemaCompileTimeoutMs),
-});
+export const resourceLimitsSchema = z
+  .object({
+    maxToolsPerSource: z.number().int().positive().default(defaultResourceLimits.maxToolsPerSource),
+    maxToolsTotal: z.number().int().positive().default(defaultResourceLimits.maxToolsTotal),
+    maxInputBytes: z.number().int().positive().default(defaultResourceLimits.maxInputBytes),
+    maxOutputBytes: z.number().int().positive().default(defaultResourceLimits.maxOutputBytes),
+    maxSchemaBytes: z.number().int().positive().default(defaultResourceLimits.maxSchemaBytes),
+    maxQueuePerSource: z.number().int().positive().default(defaultResourceLimits.maxQueuePerSource),
+    maxSchemaDepth: z.number().int().positive().default(defaultResourceLimits.maxSchemaDepth),
+  })
+  .strict();
 
-export const runtimeConfigSchema = z.object({
-  runtime: z.object({
-    name: z.string().default("mcp2webmcp"),
-    logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
-    logPath: z.string().min(1).optional(),
-    logMaxBytes: z.number().int().positive().default(5_242_880),
-    invocationDeadlineMs: z.number().int().positive().default(65_000),
-  }),
-  mcp: z
-    .object({
-      stdio: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
-    })
-    .default({ stdio: { enabled: true } }),
-  browser: z.object({
-    adapter: z.string().default("fake"),
-    allowedOrigins: z.array(z.string()).default([]),
-    mcpb: z
+export const runtimeConfigSchema = z
+  .object({
+    runtime: z
       .object({
-        host: z.string().optional(),
-        port: z.number().int().positive().optional(),
-        persistPath: z.string().optional(),
-        relayId: z.string().optional(),
-        label: z.string().optional(),
-        invokeTimeoutMs: z.number().int().positive().optional(),
-        maxPayloadBytes: z.number().int().positive().optional(),
+        name: z.string().default("mcp2webmcp"),
+        logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
+        logPath: z.string().min(1).optional(),
+        logMaxBytes: z.number().int().positive().default(5_242_880),
+        invocationDeadlineMs: z.number().int().positive().default(65_000),
       })
-      .optional(),
-    extension: z
+      .strict(),
+    mcp: z
       .object({
-        host: z.string().optional(),
-        port: z.number().int().positive().optional(),
-        invokeTimeoutMs: z.number().int().positive().optional(),
+        stdio: z
+          .object({ enabled: z.boolean().default(true) })
+          .strict()
+          .default({ enabled: true }),
       })
-      .optional(),
-  }),
-  policy: policyConfigSchema,
-  consent: consentConfigSchema,
-  audit: z.object({
-    enabled: z.boolean().default(true),
-    path: z.string().min(1),
-    maxBytes: z.number().int().positive().default(10_485_760),
-  }),
-  limits: resourceLimitsSchema.default(defaultResourceLimits),
-}).superRefine((config, ctx) => {
-  if (config.browser.allowedOrigins.includes("*")) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `allowedOrigins must not include * for production ${config.browser.adapter}`,
-      path: ["browser", "allowedOrigins"],
-    });
-  }
-  const adapter = config.browser.adapter;
-  if (adapter !== "mcpb" && adapter !== "extension") return;
-  if (adapter === "extension" && config.consent.enabled) return;
-  if (config.browser.allowedOrigins.length === 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `${adapter} adapter requires an explicit allowedOrigins list when consent is disabled`,
-      path: ["browser", "allowedOrigins"],
-    });
-  }
-});
+      .strict()
+      .default({ stdio: { enabled: true } }),
+    browser: z
+      .object({
+        adapter: z.enum(["fake", "mcpb", "extension"]).default("fake"),
+        allowedOrigins: z.array(z.string()).default([]),
+        mcpb: z
+          .object({
+            host: z.string().optional(),
+            port: z.number().int().min(1).max(65_535).optional(),
+            persistPath: z.string().optional(),
+            relayId: z.string().optional(),
+            label: z.string().optional(),
+            invokeTimeoutMs: z.number().int().positive().optional(),
+            maxPayloadBytes: z.number().int().positive().optional(),
+          })
+          .strict()
+          .optional(),
+        extension: z
+          .object({
+            host: z.string().optional(),
+            port: z.number().int().min(1).max(65_535).optional(),
+            invokeTimeoutMs: z.number().int().positive().optional(),
+            authToken: z.string().min(1).max(512).optional(),
+            disconnectGraceMs: z.number().int().min(0).max(300_000).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict(),
+    policy: policyConfigSchema,
+    consent: consentConfigSchema,
+    audit: z
+      .object({
+        enabled: z.boolean().default(true),
+        path: z.string().min(1),
+        maxBytes: z.number().int().positive().default(10_485_760),
+      })
+      .strict(),
+    limits: resourceLimitsSchema.default(defaultResourceLimits),
+  })
+  .strict()
+  .superRefine((config, ctx) => {
+    if (config.browser.allowedOrigins.includes("*")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `allowedOrigins must not include * for production ${config.browser.adapter}`,
+        path: ["browser", "allowedOrigins"],
+      });
+    }
+    const adapter = config.browser.adapter;
+    if (adapter !== "mcpb" && adapter !== "extension") return;
+    if (adapter === "extension" && config.consent.enabled) return;
+    if (config.browser.allowedOrigins.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${adapter} adapter requires an explicit allowedOrigins list when consent is disabled`,
+        path: ["browser", "allowedOrigins"],
+      });
+    }
+  });
