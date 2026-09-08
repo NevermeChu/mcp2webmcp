@@ -7,180 +7,169 @@
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
-    <!-- Header -->
-    <header class="header">
-      <div class="brand">
-        <img src="icons/icon-32.png" alt="Logo" class="brand-icon" />
-        <span class="brand-title">WebMCP Gateway</span>
-      </div>
-      <div style="display: flex; align-items: center; gap: 6px">
-        <button
-          type="button"
-          id="lang-toggle-btn"
-          class="btn"
-          style="padding: 2px 7px; font-size: 11px; height: 24px"
-          title="切换语言 / Switch Language"
-        >
-          EN
-        </button>
-        <div id="status-pill" class="status-pill">
-          <span class="status-dot"></span>
-          <span id="status-text">检查中…</span>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <img src="icons/icon-32.png" alt="" class="brand-icon" />
+          <div class="brand-copy">
+            <div class="brand-title">WebMCP Gateway</div>
+            <div class="brand-subtitle">Browser tools, locally bridged</div>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button
+            type="button"
+            id="lang-toggle-btn"
+            class="quiet-btn"
+            title="切换语言 / Switch Language"
+          >
+            EN
+          </button>
+          <div id="status-pill" class="status-pill">
+            <span class="status-dot"></span
+            ><span id="status-text" data-i18n="status_checking">检查中…</span>
+          </div>
+          <button
+            type="button"
+            id="refresh-btn"
+            class="icon-btn"
+            title="刷新状态"
+            aria-label="刷新状态"
+          >
+            ⟳
+          </button>
+        </div>
+      </header>
+
+      <div class="scroll-area">
+        <div class="content">
+          <section id="offline-banner" class="offline-banner" hidden>
+            <div class="offline-heading">
+              <div>
+                <strong data-i18n="gateway_offline_title">网关未连接</strong>
+                <p data-i18n="gateway_offline_hint">请确保本机 Gateway 服务正在运行：</p>
+              </div>
+              <button
+                type="button"
+                id="reconnect-btn"
+                class="secondary-btn"
+                data-i18n="reconnect_btn"
+              >
+                重新连接
+              </button>
+            </div>
+            <div class="cmd-box">
+              <code id="cmd-text">node apps/gateway/dist/main.js</code
+              ><button type="button" id="copy-cmd-btn" class="copy-btn" data-i18n="copy">
+                复制
+              </button>
+            </div>
+          </section>
+          <div id="pick-error" class="inline-error" hidden></div>
+
+          <section class="page-card">
+            <div class="page-kicker-row">
+              <span class="eyebrow" data-i18n="active_tab">当前页面</span
+              ><span id="active-tab-runtime" class="runtime-state" data-i18n="runtime_inactive"
+                >未激活</span
+              >
+            </div>
+            <h1 id="active-tab-title" class="active-tab-title" data-i18n="loading">加载中…</h1>
+            <div id="active-tab-origin" class="origin-text">about:blank</div>
+            <div class="summary-row">
+              <div class="metric">
+                <strong id="active-tools-count">0</strong
+                ><span data-i18n="metric_tools">可用工具</span>
+              </div>
+              <div class="metric">
+                <strong id="inv-count">0</strong><span data-i18n="metric_calls">最近调用</span>
+              </div>
+              <button
+                type="button"
+                id="register-tool"
+                class="primary-btn"
+                data-i18n="register_tool"
+              >
+                ＋ 从页面创建
+              </button>
+            </div>
+          </section>
+
+          <nav class="view-tabs" aria-label="Content view">
+            <button type="button" class="view-tab active" data-view="tools">
+              <span data-i18n="tools_tab">工具</span
+              ><span id="tools-tab-count" class="tab-count">0</span>
+            </button>
+            <button type="button" class="view-tab" data-view="activity">
+              <span data-i18n="activity_tab">活动</span
+              ><span id="activity-tab-count" class="tab-count">0</span>
+            </button>
+          </nav>
+          <section id="tools-view" class="panel-view">
+            <div id="tools-container" class="tools-list">
+              <div class="empty-state" data-i18n="empty_tools_short">当前页面暂无注册工具。</div>
+            </div>
+          </section>
+          <section id="activity-view" class="panel-view" hidden>
+            <div id="invocations-container" class="invocations-list">
+              <div class="empty-state" data-i18n="waiting_invocations">
+                等待 AI Agent 调用页面工具…
+              </div>
+            </div>
+          </section>
+
+          <section class="other-tabs-section">
+            <button
+              type="button"
+              id="other-tabs-toggle"
+              class="section-toggle"
+              aria-expanded="true"
+            >
+              <span data-i18n="other_tabs">其他 WebMCP 标签页</span
+              ><span class="section-meta"
+                ><span id="other-tabs-count">0</span><span class="toggle-chevron">⌄</span></span
+              >
+            </button>
+            <div id="other-tabs-container" class="other-tabs-list">
+              <div class="empty-state compact" data-i18n="no_other_tabs">
+                无其他打开的 WebMCP 页面。
+              </div>
+            </div>
+          </section>
         </div>
       </div>
-    </header>
 
-    <!-- Offline Alert Banner -->
-    <div id="offline-banner" class="offline-banner" hidden>
-      <div class="offline-title">
-        <span data-i18n="gateway_offline_title">网关未连接</span>
-        <button
-          type="button"
-          id="reconnect-btn"
-          class="btn btn-icon"
-          style="padding: 2px 6px; font-size: 11px"
-          data-i18n="reconnect_btn"
-        >
-          重新连接
-        </button>
-      </div>
-      <div data-i18n="gateway_offline_hint">请确保本机 Gateway 服务正在运行：</div>
-      <div class="cmd-box">
-        <span id="cmd-text">node apps/gateway/dist/main.js</span>
-        <button
-          type="button"
-          id="copy-cmd-btn"
-          class="copy-btn"
-          title="Copy command"
-          data-i18n="copy"
-        >
-          复制
-        </button>
-      </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="action-bar">
-      <button type="button" id="register-tool" class="btn btn-primary" data-i18n="register_tool">
-        ✨ 拾取页面元素生成工具
-      </button>
-      <button type="button" id="refresh-btn" class="btn btn-icon" title="刷新状态">⟳</button>
-    </div>
-
-    <div id="pick-error" class="offline-banner" style="margin-bottom: 12px" hidden></div>
-
-    <!-- Active Tab Panel -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title" data-i18n="active_tab">当前页面</span>
-        <span
-          id="active-tools-count"
-          class="pill"
-          style="background: var(--bg-subtle); color: var(--text-muted)"
-          >0 个工具</span
-        >
-      </div>
-      <div id="active-tab-title" class="active-tab-title">加载中…</div>
-      <div class="active-tab-meta">
-        <span id="active-tab-origin" class="origin-badge">about:blank</span>
-        <span id="active-tab-runtime" class="pill">检查运行时…</span>
-      </div>
-
-      <!-- Active Tools List -->
-      <div class="section-title">
-        <span data-i18n="page_tools_title">页面已暴露工具</span>
-      </div>
-      <div id="tools-container" class="tools-list">
-        <div class="empty-state">当前页面暂无注册工具。</div>
-      </div>
-    </div>
-
-    <!-- Live Activity / Invocations Stream -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title" data-i18n="live_invocations">实时调用记录</span>
-        <span
-          id="inv-count"
-          class="pill"
-          style="background: var(--bg-subtle); color: var(--text-muted)"
-          >0 次调用</span
-        >
-      </div>
-      <div id="invocations-container" class="invocations-list">
-        <div class="empty-state">等待 AI Agent 调用页面工具…</div>
-      </div>
-    </div>
-
-    <!-- Other Tabs -->
-    <details id="other-tabs-details" style="margin-top: 10px">
-      <summary
-        style="
-          font-size: 11px;
-          font-weight: 700;
-          color: var(--text-muted);
-          cursor: pointer;
-          text-transform: uppercase;
-        "
-      >
-        <span data-i18n="other_tabs">其他 WebMCP 标签页</span> (<span id="other-tabs-count">0</span
-        >)
-      </summary>
-      <div id="other-tabs-container" class="other-tabs-list" style="margin-top: 8px">
-        <div class="empty-state" style="padding: 8px">无其他打开的 WebMCP 页面。</div>
-      </div>
-    </details>
-
-    <!-- Required token; must match browser.extension.authToken or MCP2WEBMCP_EXTENSION_TOKEN. -->
-    <details id="auth-settings" style="margin-top: 10px">
-      <summary
-        style="
-          font-size: 11px;
-          font-weight: 700;
-          color: var(--text-muted);
-          cursor: pointer;
-          text-transform: uppercase;
-        "
-      >
-        <span data-i18n="auth_settings">Gateway 鉴权令牌</span>
-      </summary>
-      <div style="margin-top: 8px">
-        <input
-          id="auth-token-input"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="browser.extension.authToken"
-          style="
-            width: 100%;
-            box-sizing: border-box;
-            padding: 6px 8px;
-            font:
-              11px ui-monospace,
-              monospace;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--bg-subtle);
-            color: var(--text-primary);
-          "
-        />
-        <div style="display: flex; gap: 6px; margin-top: 6px; align-items: center">
-          <button type="button" id="auth-token-save" class="btn" style="font-size: 11px">
-            保存 / Save
+      <section id="auth-settings" class="settings-panel" hidden>
+        <div class="settings-title" data-i18n="auth_settings">Gateway 鉴权令牌</div>
+        <p data-i18n="auth_hint">必填；须与 Gateway 配置中的共享令牌一致。</p>
+        <div class="token-row">
+          <input
+            id="auth-token-input"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="browser.extension.authToken"
+          /><button type="button" id="auth-token-save" class="save-btn" data-i18n="save">
+            保存</button
+          ><button type="button" id="auth-token-clear" class="clear-btn" data-i18n="clear">
+            清除
           </button>
-          <button type="button" id="auth-token-clear" class="btn" style="font-size: 11px">
-            清除 / Clear
-          </button>
-          <span id="auth-token-status" style="font-size: 10px; color: var(--text-muted)"></span>
         </div>
-        <p
-          data-i18n="auth_hint"
-          style="margin: 6px 0 0; font-size: 10px; line-height: 1.5; color: var(--text-muted)"
+        <span id="auth-token-status" class="token-status"></span>
+      </section>
+      <footer class="footer-bar">
+        <span class="local-note"
+          >◯ <span data-i18n="local_only">仅连接本机</span> 127.0.0.1:9334</span
+        ><button
+          type="button"
+          id="auth-settings-toggle"
+          class="footer-action"
+          data-i18n="connection_settings"
         >
-          必填；须与 Gateway 的 browser.extension.authToken 或 MCP2WEBMCP_EXTENSION_TOKEN 一致。
-        </p>
-      </div>
-    </details>
-
+          连接设置
+        </button>
+      </footer>
+    </main>
     <script src="sidepanel.js"></script>
   </body>
 </html>

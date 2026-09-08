@@ -8,10 +8,14 @@ const I18N = {
     gateway_offline_hint: "请确保本机 Gateway 服务正在运行：",
     copy: "复制",
     copied: "已复制!",
-    register_tool: "✨ 拾取页面元素生成工具",
+    register_tool: "＋ 从页面创建",
     refresh: "刷新状态",
     active_tab: "当前页面",
     tools_suffix: "个工具",
+    metric_tools: "可用工具",
+    metric_calls: "最近调用",
+    tools_tab: "工具",
+    activity_tab: "活动",
     loading: "加载中…",
     no_page_detected: "未检测到 WebMCP 页面",
     open_http_hint: "请在 http(s) 网页中使用",
@@ -21,6 +25,9 @@ const I18N = {
     page_tools_title: "页面已暴露工具",
     empty_tools:
       "当前页面暂无注册工具。<br>点击上方 <strong>拾取页面元素生成工具</strong>，可将网页按钮或表单转化为 AI 工具。",
+    empty_tools_short: "当前页面暂无注册工具。",
+    tool_available: "可用",
+    tool_confirm: "需确认",
     tag_destructive: "破坏性",
     tag_readonly: "只读",
     tag_idempotent: "幂等",
@@ -38,6 +45,10 @@ const I18N = {
     auth_hint: "必填；须与 Gateway 的 browser.extension.authToken 或环境变量一致。保存后自动重连。",
     auth_saved: "已保存，重连中…",
     auth_cleared: "已清除",
+    save: "保存",
+    clear: "清除",
+    local_only: "仅连接本机",
+    connection_settings: "连接设置",
     lang_btn: "EN",
   },
   en: {
@@ -49,10 +60,14 @@ const I18N = {
     gateway_offline_hint: "Make sure Gateway loopback server is running:",
     copy: "Copy",
     copied: "Copied!",
-    register_tool: "✨ Pick Element to Tool",
+    register_tool: "＋ Create from Page",
     refresh: "Refresh state",
     active_tab: "Active Tab",
     tools_suffix: "tools",
+    metric_tools: "Available tools",
+    metric_calls: "Recent calls",
+    tools_tab: "Tools",
+    activity_tab: "Activity",
     loading: "Loading…",
     no_page_detected: "No WebMCP page detected",
     open_http_hint: "Open an http(s) page to start",
@@ -62,6 +77,9 @@ const I18N = {
     page_tools_title: "Page Tools",
     empty_tools:
       "No tools registered on this page yet.<br>Click <strong>Pick Element to Tool</strong> above to expose buttons or forms to AI.",
+    empty_tools_short: "No tools registered on this page.",
+    tool_available: "Available",
+    tool_confirm: "Confirm",
     tag_destructive: "Destructive",
     tag_readonly: "ReadOnly",
     tag_idempotent: "Idempotent",
@@ -80,6 +98,10 @@ const I18N = {
       "Required; must match browser.extension.authToken or MCP2WEBMCP_EXTENSION_TOKEN. Saving reconnects automatically.",
     auth_saved: "Saved, reconnecting…",
     auth_cleared: "Cleared",
+    save: "Save",
+    clear: "Clear",
+    local_only: "Local only",
+    connection_settings: "Connection settings",
     lang_btn: "中",
   },
 };
@@ -139,12 +161,12 @@ function renderGatewayStatus(status) {
   if (!status || !status.connected) {
     pill.className = "status-pill disconnected";
     text.textContent = t("status_disconnected");
+    pill.title = "";
     if (banner) banner.hidden = false;
   } else {
     pill.className = "status-pill connected";
-    text.textContent = status.gateway
-      ? status.gateway.replace(/^ws:\/\//, "")
-      : t("status_connected");
+    text.textContent = t("status_connected");
+    pill.title = status.gateway || "";
     if (banner) banner.hidden = true;
   }
 }
@@ -154,14 +176,16 @@ function renderActiveTab(activeTab) {
   const originEl = document.getElementById("active-tab-origin");
   const runtimeEl = document.getElementById("active-tab-runtime");
   const toolsCountEl = document.getElementById("active-tools-count");
+  const toolsTabCountEl = document.getElementById("tools-tab-count");
   const toolsContainer = document.getElementById("tools-container");
 
   if (!activeTab) {
     titleEl.textContent = t("no_page_detected");
     originEl.textContent = t("open_http_hint");
-    runtimeEl.className = "pill";
+    runtimeEl.className = "runtime-state";
     runtimeEl.textContent = t("runtime_inactive");
-    toolsCountEl.textContent = `0 ${t("tools_suffix")}`;
+    toolsCountEl.textContent = "0";
+    toolsTabCountEl.textContent = "0";
     toolsContainer.innerHTML = `<div class="empty-state">${t("open_http_hint")}</div>`;
     return;
   }
@@ -171,64 +195,71 @@ function renderActiveTab(activeTab) {
   originEl.textContent = activeTab.origin || "";
 
   if (activeTab.runtimePresent) {
-    runtimeEl.className = "pill pill-native";
+    runtimeEl.className = "runtime-state ready";
     runtimeEl.textContent = t("runtime_active");
   } else {
-    runtimeEl.className = "pill pill-error";
+    runtimeEl.className = "runtime-state error";
     runtimeEl.textContent = activeTab.runtimeError || t("runtime_none");
   }
 
   const tools = Array.isArray(activeTab.tools) ? activeTab.tools : [];
-  toolsCountEl.textContent = `${tools.length} ${t("tools_suffix")}`;
+  toolsCountEl.textContent = String(tools.length);
+  toolsTabCountEl.textContent = String(tools.length);
 
   if (tools.length === 0) {
-    toolsContainer.innerHTML = `<div class="empty-state">${t("empty_tools")}</div>`;
+    toolsContainer.innerHTML = `<div class="empty-state">${t("empty_tools_short")}</div>`;
     return;
   }
 
   toolsContainer.innerHTML = tools
     .map((tool) => {
-      const name = escapeHtml(tool.originalName || "unnamed");
+      const rawName = tool.originalName || "unnamed";
+      const name = escapeHtml(rawName);
       const desc = escapeHtml(tool.description || t("no_desc"));
       const isDestructive = Boolean(tool.annotations?.destructiveHint);
-      const isReadOnly = Boolean(tool.annotations?.readOnlyHint);
-      const isIdempotent = Boolean(tool.annotations?.idempotentHint);
-
-      let badges = "";
-      if (isDestructive)
-        badges += `<span class="tag tag-destructive">${t("tag_destructive")}</span>`;
-      if (isReadOnly) badges += `<span class="tag tag-readonly">${t("tag_readonly")}</span>`;
-      if (isIdempotent) badges += `<span class="tag tag-idempotent">${t("tag_idempotent")}</span>`;
+      const badge = isDestructive
+        ? `<span class="tag tag-destructive">${t("tool_confirm")}</span>`
+        : `<span class="tag tag-readonly">${t("tool_available")}</span>`;
 
       let schemaHtml = "";
       if (tool.inputSchema && typeof tool.inputSchema === "object") {
         const schemaPretty = escapeHtml(JSON.stringify(tool.inputSchema, null, 2));
-        schemaHtml = `
-          <details class="schema-details">
-            <summary>${t("schema_summary")}</summary>
-            <pre class="schema-box">${schemaPretty}</pre>
-          </details>`;
+        schemaHtml = `<div class="schema-label">${t("schema_summary")}</div>
+          <pre class="schema-box">${schemaPretty}</pre>`;
       }
 
       return `
-        <div class="tool-item">
-          <div class="tool-header">
-            <span class="tool-name">${name}</span>
-            <div class="tool-badges">${badges}</div>
-          </div>
-          <div class="tool-desc">${desc}</div>
-          ${schemaHtml}
-        </div>`;
+        <article class="tool-item">
+          <button type="button" class="tool-summary" aria-expanded="false">
+            <span class="tool-icon">${escapeHtml(rawName.slice(0, 1).toUpperCase())}</span>
+            <span class="tool-copy">
+              <span class="tool-name">${name}</span>
+              <span class="tool-desc">${desc}</span>
+            </span>
+            <span class="tool-badges">${badge}<span class="tool-chevron">⌄</span></span>
+          </button>
+          <div class="tool-details">${schemaHtml}</div>
+        </article>`;
     })
     .join("");
+
+  toolsContainer.querySelectorAll(".tool-summary").forEach((summary) => {
+    summary.addEventListener("click", () => {
+      const item = summary.closest(".tool-item");
+      const isOpen = item?.classList.toggle("open") || false;
+      summary.setAttribute("aria-expanded", String(isOpen));
+    });
+  });
 }
 
 function renderInvocations(invocations) {
   const container = document.getElementById("invocations-container");
   const countEl = document.getElementById("inv-count");
+  const tabCountEl = document.getElementById("activity-tab-count");
 
   const list = Array.isArray(invocations) ? invocations : [];
-  countEl.textContent = `${list.length} ${t("calls_suffix")}`;
+  countEl.textContent = String(list.length);
+  tabCountEl.textContent = String(list.length);
 
   if (list.length === 0) {
     container.innerHTML = `<div class="empty-state">${t("waiting_invocations")}</div>`;
@@ -247,7 +278,7 @@ function renderInvocations(invocations) {
 
       let bodyText = "";
       if (isErr) {
-        bodyText = `<span style="color: var(--danger-text);">${t("error_prefix")}${errorMsg || "failed"}</span>`;
+        bodyText = `${t("error_prefix")}${errorMsg || "failed"}`;
       } else if (resultPreview) {
         bodyText = `Result: ${resultPreview}`;
       } else if (inv.args && typeof inv.args === "object") {
@@ -256,11 +287,12 @@ function renderInvocations(invocations) {
 
       return `
         <div class="inv-item ${isErr ? "error" : ""}">
-          <div class="inv-header">
-            <span class="inv-name">${name}</span>
-            <span class="inv-meta">${timeStr} · ${durationStr}</span>
+          <span class="inv-status">${isErr ? "×" : "✓"}</span>
+          <div class="inv-copy">
+            <div class="inv-name">${name}</div>
+            <div class="inv-body">${bodyText}</div>
           </div>
-          <div class="inv-body">${bodyText}</div>
+          <span class="inv-meta">${timeStr}${durationStr ? ` · ${durationStr}` : ""}</span>
         </div>`;
     })
     .join("");
@@ -274,25 +306,25 @@ function renderOtherTabs(allTabs, activeTabId) {
   countEl.textContent = String(others.length);
 
   if (others.length === 0) {
-    container.innerHTML = `<div class="empty-state" style="padding: 8px;">${t("no_other_tabs")}</div>`;
+    container.innerHTML = `<div class="empty-state compact">${t("no_other_tabs")}</div>`;
     return;
   }
 
   container.innerHTML = others
     .map((tab) => {
-      const title = escapeHtml(tab.title || tab.origin || "Tab");
+      const rawTitle = tab.title || tab.origin || "Tab";
+      const title = escapeHtml(rawTitle);
       const origin = escapeHtml(tab.origin || "");
       const count = Array.isArray(tab.tools) ? tab.tools.length : tab.toolCount || 0;
 
       return `
         <div class="tab-item">
+          <div class="tab-icon">${escapeHtml(rawTitle.slice(0, 1).toUpperCase())}</div>
           <div class="tab-item-info">
             <div class="tab-item-title">${title}</div>
             <div class="tab-item-origin">${origin} · ${count} ${t("tools_suffix")}</div>
           </div>
-          <button type="button" class="btn btn-icon switch-tab-btn" data-tab-id="${tab.tabId}" style="padding: 3px 8px; font-size: 11px;">
-            ${t("switch_tab")}
-          </button>
+          <button type="button" class="switch-tab-btn" data-tab-id="${tab.tabId}" title="${t("switch_tab")}" aria-label="${t("switch_tab")}">›</button>
         </div>`;
     })
     .join("");
@@ -332,6 +364,17 @@ function renderAll(status) {
   renderOtherTabs(tabsList, activeTab ? activeTab.tabId : activeId);
 }
 
+function selectView(view) {
+  const showTools = view !== "activity";
+  document.getElementById("tools-view").hidden = !showTools;
+  document.getElementById("activity-view").hidden = showTools;
+  document.querySelectorAll(".view-tab").forEach((tab) => {
+    const isActive = tab.getAttribute("data-view") === (showTools ? "tools" : "activity");
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+}
+
 async function fetchStatus() {
   chrome.runtime.sendMessage({ type: "status" }, (status) => {
     if (chrome.runtime.lastError || !status) {
@@ -362,6 +405,24 @@ document.getElementById("lang-toggle-btn")?.addEventListener("click", () => {
   localStorage.setItem("mcp2webmcp_lang", currentLang);
   applyStaticI18n();
   renderAll(lastStatus);
+});
+
+document.querySelectorAll(".view-tab").forEach((tab) => {
+  tab.addEventListener("click", () => selectView(tab.getAttribute("data-view")));
+});
+
+document.getElementById("other-tabs-toggle")?.addEventListener("click", (event) => {
+  const button = event.currentTarget;
+  const container = document.getElementById("other-tabs-container");
+  const expanded = button.getAttribute("aria-expanded") === "true";
+  button.setAttribute("aria-expanded", String(!expanded));
+  container.hidden = expanded;
+});
+
+document.getElementById("auth-settings-toggle")?.addEventListener("click", () => {
+  const settings = document.getElementById("auth-settings");
+  settings.hidden = !settings.hidden;
+  if (!settings.hidden) document.getElementById("auth-token-input")?.focus();
 });
 
 // Action: Register tool

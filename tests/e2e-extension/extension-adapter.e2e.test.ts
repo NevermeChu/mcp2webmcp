@@ -293,7 +293,7 @@ async function popupLineForOrigin(
       .locator("#active-tools-count")
       .textContent()
       .catch(() => "");
-    if (activeOrigin) candidates.push(`${activeOrigin} ${activeCount ?? ""}`);
+    if (activeOrigin) candidates.push(`${activeOrigin} ${activeCount ?? ""} tools`);
     candidates.push(...(await popup.locator(".tab-item-origin").allTextContents()));
     if (candidates.length > 0 && !candidates.some((line) => line.includes(origin))) {
       // Surface what the popup actually rendered so failures are diagnosable.
