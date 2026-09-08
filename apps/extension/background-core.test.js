@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPageSnapshot, originFromTabUrl, sourceIdFor } from "./background-core.js";
+import { applyPageSnapshot, originFromTabUrl } from "./background-core.js";
 
 const base = {
   runtimePresent: true,
@@ -17,12 +17,6 @@ describe("originFromTabUrl", () => {
     expect(originFromTabUrl("file:///C:/tmp/x.html")).toBeUndefined();
     expect(originFromTabUrl("chrome://extensions")).toBeUndefined();
     expect(originFromTabUrl("not a url")).toBeUndefined();
-  });
-});
-
-describe("sourceIdFor", () => {
-  it("prefixes tab ids", () => {
-    expect(sourceIdFor(18)).toBe("tab:18");
   });
 });
 

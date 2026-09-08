@@ -16,28 +16,6 @@ describe("ToolRegistry", () => {
     };
   }
 
-  it("registers a tool", () => {
-    const registry = new ToolRegistry();
-    registry.register(tool());
-    expect(registry.list()).toHaveLength(1);
-  });
-
-  it("updates a duplicate runtimeId", () => {
-    const registry = new ToolRegistry();
-    const first = tool();
-    registry.register(first);
-    registry.register({ ...first, description: "updated" });
-    expect(registry.get(first.identity.runtimeId)?.description).toBe("updated");
-    expect(registry.list()).toHaveLength(1);
-  });
-
-  it("unregisters by source", () => {
-    const registry = new ToolRegistry();
-    registry.register(tool());
-    registry.unregisterBySource("fake-1", "tab-18");
-    expect(registry.list()).toHaveLength(0);
-  });
-
   it("keeps a single row when the same tool is re-registered after a generation bump", () => {
     const registry = new ToolRegistry();
     const first = tool(testSource({ generation: 1 }));

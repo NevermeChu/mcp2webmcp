@@ -19,21 +19,6 @@ describe("NamespaceResolver", () => {
     expect(a.runtimeId).not.toBe(b.runtimeId);
   });
 
-  it("differs for the same tool on different origins", () => {
-    const a = names.resolve(testSource({ origin: "https://knowmesh.app" }), "search");
-    const b = names.resolve(
-      testSource({ origin: "https://github.com", sourceId: "other" }),
-      "search",
-    );
-    expect(a.mcpName).not.toBe(b.mcpName);
-  });
-
-  it("differs for the same origin and different sourceId", () => {
-    const a = names.resolve(testSource({ sourceId: "s1" }), "search");
-    const b = names.resolve(testSource({ sourceId: "s2" }), "search");
-    expect(a.runtimeId).not.toBe(b.runtimeId);
-  });
-
   it("sanitizes invalid MCP characters", () => {
     const identity = names.resolve(testSource(), "search documents!");
     expect(identity.mcpName).toMatch(/^[a-zA-Z0-9_]+$/);

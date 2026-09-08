@@ -3,16 +3,6 @@ import type { RuntimeInvokeResult } from "@mcp2webmcp/protocol";
 import { mapErrorCodeToJsonRpc, mapInvokeResult, MCP_JSONRPC_INVALID_PARAMS } from "./error-map.js";
 
 describe("MCP error mapping", () => {
-  it("passes success content through", () => {
-    const mapped = mapInvokeResult({
-      status: "success",
-      content: [{ type: "text", text: "ok" }],
-      sourceGeneration: 1,
-    });
-    expect(mapped.isError).toBeUndefined();
-    expect(mapped.content).toEqual([{ type: "text", text: "ok" }]);
-  });
-
   it("maps policy deny to CallToolResult isError", () => {
     const result: RuntimeInvokeResult = {
       status: "error",

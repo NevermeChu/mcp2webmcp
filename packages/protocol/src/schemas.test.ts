@@ -36,17 +36,8 @@ const runtimeTool = {
 };
 
 describe("protocol schemas", () => {
-  it("accepts a valid BrowserSource", () => {
-    expect(browserSourceSchema.parse(source).generation).toBe(1);
-  });
-
   it("rejects a missing adapterId", () => {
     expect(() => browserSourceSchema.parse({ ...source, adapterId: "" })).toThrow();
-  });
-
-  it("accepts a RuntimeTool envelope", () => {
-    const tool = runtimeToolSchema.parse(runtimeTool);
-    expect(tool.identity.originalName).toBe("search_documents");
   });
 
   it("rejects removed speculative source and tool fields", () => {

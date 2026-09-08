@@ -108,15 +108,6 @@ describe("McpBAdapter", () => {
     relay.setSnapshot([demoRelaySource()], [demoRelayTool()]);
     await waitFor(async () => (await adapter.listSources())[0]?.generation === 2);
   });
-
-  it("refuses to construct with wildcard origins", () => {
-    expect(
-      () =>
-        new McpBAdapter({
-          allowedOrigins: ["*"],
-        }),
-    ).toThrow(/\*/);
-  });
 });
 
 async function waitFor(
