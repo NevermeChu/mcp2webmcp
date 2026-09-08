@@ -8,7 +8,6 @@ export function testRuntimeConfig(auditPath: string): RuntimeConfig {
       logLevel: "info",
       invocationDeadlineMs: 65_000,
     },
-    mcp: { stdio: { enabled: true } },
     browser: {
       adapter: "fake",
       allowedOrigins: ["https://knowmesh.app"],

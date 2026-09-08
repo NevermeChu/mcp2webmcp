@@ -1,109 +1,92 @@
-# 把 WebMCP Gateway 接到桌面 MCP Client
+# 连接桌面 MCP Client
 
-产品对外标题是 **WebMCP Gateway**，仓库、包和 CLI 都是 **mcp2webmcp**。v0.1 只支持 **stdio MCP**；进程入口是 **`mcp2webmcp`**。每个 MCP 客户端对应 **一个 Gateway 进程**；多个客户端可以共享同一套 loopback relay（相同 `host` / `port` / `persistPath` / `relayId`）。
+本文只说明 Cursor 与 Claude Desktop 的接线、验证和客户端侧故障排查。配置字段见 [当前配置](current/configuration.md)，系统边界见 [当前架构](current/architecture.md)。
 
-意图：让暂未支持 WebMCP 的 MCP 客户端调用页面工具。调用路径：WebMCP → Gateway → MCP。
-
-两条接入：
-
-1. **cooperative embed**（`configs/demo.yaml`）：页面除了 `registerTool` 还要加载 MCP-B embed。
-2. **ExtensionAdapter**（`configs/extension-demo.yaml`）：加载 `apps/extension`，页面只需 `registerTool`（runtime 由扩展补，见 [ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)），不要让扩展自己当 MCP server。
-
-默认 Gateway 仍可以是 `adapter: mcpb`。扩展 loopback 默认 `127.0.0.1:9334`，不要占用 MCP-B 的 `9333`。
-
-两条可以写在同一份 `.cursor/mcp.json` 里：**不要**用 extension yaml 覆盖旧的 `mcp2webmcp-demo` 条目。`mcp2webmcp-demo` 必须指向 `configs/demo.yaml`（9333）；`mcp2webmcp-extension-demo` 指向 `configs/extension-demo.yaml`（9334）。两条都指向 extension yaml 会 `EADDRINUSE`。ExtensionAdapter 没有 MCP-B 那种「发现已有 relay 再切 client」的行为。Cursor 启用该 MCP 时会自己 `node .../main.js --config .../extension-demo.yaml`；这不是人手终端。Reload 必须让该子进程退出，否则旧进程占着 9334，新进程起不来。
-
-## 10 分钟 Demo（Windows PowerShell）
-
-仓库根目录：
+## 前置条件
 
 ```powershell
 pnpm install
 pnpm build
 ```
 
-终端 1 — Gateway（stdio 由 MCP Client 拉起时也可跳过本终端，见下一节）：
+当前对外传输只有 stdio MCP。MCP Client 应启动 `apps/gateway/dist/main.js` 或安装后的 `mcp2webmcp` CLI，不要配置 HTTP URL。源码方式必须使用配置文件的绝对路径，因为 Client 启动子进程时的工作目录不一定是仓库根目录。
 
-```powershell
-node apps/gateway/dist/main.js --config configs/demo.yaml
-```
+## 选择浏览器接入
 
-终端 2 — Demo 页（origin 必须是 `http://127.0.0.1:18080`，relay 端口必须是 `9333`，与 `configs/demo.yaml` 一致）：
+| 方式              | 适用场景                      | MCP 配置模板                                                                                | 浏览器侧                                       |
+| ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| ExtensionAdapter  | 推荐；业务页面或无 embed 页面 | [`configs/mcp-client.extension.example.json`](../configs/mcp-client.extension.example.json) | 加载 `apps/extension`，页面调用 `registerTool` |
+| cooperative embed | MCP-B 兼容与真实链路验证      | [`configs/mcp-client.example.json`](../configs/mcp-client.example.json)                     | 页面显式加载 MCP-B embed                       |
 
-```powershell
-$env:MCP2WEBMCP_E2E_RELAY_PORT = "9333"
-$env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18080"
-pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
-```
-
-浏览器打开 `http://127.0.0.1:18080`，状态变为 `ready`。
-
-终端 3 — 用参考客户端试一次（可选，需已 `pnpm build`）：把 Cursor / Claude 配好后，在对话里让它列出 tools 并调用 `echo`（参数 `{ "message": "hello" }`）。成功时应看到 `echo:hello`。
-
-`configs/demo.yaml` 只 allow：`echo`、`get_page_title`、`add`。其它工具默认 deny。带 `destructiveHint` 的工具在无确认通道时 fail-closed，不会执行。
+两种配置可同时存在，但服务名、yaml 和端口必须分别对应。不要让两个服务都使用 `configs/extension-demo.yaml`，否则会争用 9334。
 
 ## Cursor
 
-1. `pnpm build`。
-2. 复制 `configs/mcp-client.example.json`。
-3. 把其中所有 `REPO_ROOT` 换成仓库**绝对路径**（建议用正斜杠，例如 `D:/src/mcp2webmcp`）。`--config` 必须是绝对路径：Client 拉起进程时的 cwd 不一定是仓库根。
-4. 放到 Cursor 的 MCP 配置里（常见为用户级 `mcp.json`，或项目 `.cursor/mcp.json`）。项目级 `.cursor/mcp.json` 含本机绝对路径，已加入 `.gitignore`，不要提交。
-5. 启动 fixture 页面并打开 `http://127.0.0.1:18080`。
-6. 重载 Cursor MCP 后应看到服务名 `mcp2webmcp-demo`，以及 `echo` / `get_page_title` / `add`（名称带 namespace 哈希，不是裸 `echo`）。
+1. 复制所选模板中的 `mcpServers` 条目到用户级或项目级 MCP 配置。
+2. 把所有 `REPO_ROOT` 换成仓库绝对路径，Windows 也可使用正斜杠，例如 `D:/src/mcp2webmcp`。
+3. Extension 模式还要把 `REPLACE_WITH_A_RANDOM_TOKEN` 换成随机长令牌。
+4. 重载对应 MCP 服务。
 
-第二个 Cursor 窗口再开一个 Gateway 即可：沿用同一份 `configs/demo.yaml`，第二个进程会按 MCP-B client-mode 挂到已有 relay，不必再绑一个浏览器集群。
-
-## ExtensionAdapter（无 embed）
-
-1. `pnpm build`。
-2. 加载未打包扩展：`chrome://extensions` / `edge://extensions` → `apps/extension`。
-3. 夹具：
-
-```powershell
-$env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18081"
-pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
-```
-
-打开 `http://127.0.0.1:18081`。4. 在项目 `.cursor/mcp.json` 里**增加** `mcp2webmcp-extension-demo`（模板 `configs/mcp-client.extension.example.json`），把占位符换成随机共享令牌，不要改掉已有 `mcp2webmcp-demo` 的 `demo.yaml`。5. 在扩展 Side Panel「Gateway 鉴权令牌」保存同一个令牌；Extension 模式缺少令牌会拒绝启动/连接。6. Cursor 服务名 `mcp2webmcp-extension-demo`。页面 `registerTool` 后 `webmcp_list_tools` 应看到该工具（`consented: true`）。不想给 MCP 用时调用 `webmcp_revoke_consent`（`origin` + 可选 `tool`）；恢复必须使用本机 CLI，见 [current/configuration.md](current/configuration.md)。
-
-v0.1 扩展只连一个本机端口；多个 Gateway 进程如何共享同一条浏览器连接留到下一步。
-
-协议细节：[extension-loopback-protocol.md](extension-loopback-protocol.md)。
+项目级 `.cursor/mcp.json` 含本机路径和可能的令牌，已被忽略，不应提交。
 
 ## Claude Desktop
 
-配置文件同样是 JSON 的 `mcpServers` 映射，字段与 `configs/mcp-client.example.json` 相同：`command` + `args`。把 `REPO_ROOT` 换成绝对路径后重启 Claude Desktop。
+Claude Desktop 同样使用 `mcpServers` 映射以及 `command`、`args`、`env` 字段。复制相同模板、替换绝对路径和令牌后重启客户端。
 
-不要把 `apps/gateway` 配成 HTTP URL。v0.1 没有 HTTP MCP。
+## ExtensionAdapter
 
-## 环境变量
+1. 在 `chrome://extensions` 或 `edge://extensions` 打开开发者模式，加载未打包目录 `apps/extension`。
+2. 在扩展底部“连接设置”中保存 MCP 配置里的同一个共享令牌。
+3. 打开会调用 `registerTool` 的页面。需要本地验证时启动夹具：
 
-仍使用品牌前缀 `MCP2WEBMCP_*`：
+   ```powershell
+   $env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18081"
+   pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
+   ```
 
-| 变量                         | 作用                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------- |
-| `MCP2WEBMCP_CONFIG`          | 等效 `--config`                                                              |
-| `MCP2WEBMCP_ALLOWED_ORIGINS` | 逗号分隔，覆盖 yaml 里的 allowlist                                           |
-| `MCP2WEBMCP_LOG_LEVEL`       | `debug` / `info` / `warn` / `error`（日志只应打 stderr，以免破坏 stdio MCP） |
+4. 访问 `http://127.0.0.1:18081`，重载 MCP 服务 `mcp2webmcp-extension-demo`。
+5. 调用 `webmcp_list_sources` 和 `webmcp_list_tools`。示例页的 `echo` 工具应出现，并可接受 `{ "message": "hello" }`。
 
-## 常见问题
+Extension Gateway 通常由 MCP Client 拉起，不需要再从终端启动第二份相同配置的进程。当前一个 Extension WebSocket 会话只对应一个 Gateway；它不具备 MCP-B relay 的多进程共享模式。
 
-- **列表里没有页面工具**：mcpb 的 origin 必须与 `allowedOrigins` 逐字一致（含协议和端口）。`localhost` 和 `127.0.0.1` 不是同一个 origin。extension 在 `consent.enabled` 且 `allowedOrigins: []` 时会接入扩展看到的所有 origin。
-- **工具在但调用失败 `POLICY_DENIED`**：default deny；若未开启 consent，allow 规则必须是精确 origin + 精确页面工具名。开启 consent 后，发现会自动放行；撤销用 `webmcp_revoke_consent`。yaml deny / `destructiveHint`→confirm 仍然优先。cooperative embed 经 MCP-B 时页面 `destructiveHint` 可能到不了 Gateway，对 `safe_backup` 这类工具要用 yaml 按 **originalName** 写 confirm。
-- **`allowedOrigins: "*"`**：`mcpb` 与 `extension` adapter 均拒绝。
-- **KnowMesh 等业务站**：用扩展路径时站点只 `registerTool`，runtime 由扩展补（[ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)）。`configs/extension-demo.yaml` 默认空 allowlist + 同意账本；也可用 yaml `allowedOrigins` 锁死 origin。cooperative embed 路径仍见 `configs/example.yaml`。
-- **relay 端口被占用**：同时改 `configs/demo.yaml` 的 `browser.mcpb.port` 和 fixture 的 `MCP2WEBMCP_E2E_RELAY_PORT`。
+`configs/extension-demo.yaml` 使用空 `allowedOrigins`、本地同意账本和自动接纳。撤销使用 `webmcp_revoke_consent`；恢复是本机 CLI 管理动作，见 [同意管理](current/configuration.md#同意管理)。
 
-## 相关文件
+扩展的安装与界面说明见 [apps/extension/README.md](../apps/extension/README.md)，协议字段见 [extension-loopback-protocol.md](extension-loopback-protocol.md)。
 
-- `configs/demo.yaml` — cooperative embed（fixture `:18080`，relay `:9333`）
-- `configs/extension-demo.yaml` — ExtensionAdapter（fixture `:18081`，loopback `:9334`）
-- `configs/mcp-client.example.json` / `configs/mcp-client.extension.example.json` — Cursor / Claude 模板
-- `configs/example.yaml` — KnowMesh 风格示例（需自行改 origin/工具名）
-- `packages/test-fixtures/webmcp-demo` — cooperative embed 页面
-- `packages/test-fixtures/webmcp-extension-demo` — 无 embed 夹具
-- `apps/extension` — 未打包 MV3 扩展
-- [extension-loopback-protocol.md](extension-loopback-protocol.md) — 扩展 ↔ Gateway JSON
-- [architecture.md](architecture.md) — 架构
-- [develop.md](develop.md) — 测试与配置
-- [adr/0009-extension-webmcp-runtime-polyfill.md](adr/0009-extension-webmcp-runtime-polyfill.md) — 扩展补页面 runtime
+## Cooperative embed
+
+该路径仍由产品代码支持，但主要用于 MCP-B 兼容和真实链路测试。页面实现及运行说明位于 [cooperative fixture README](../packages/test-fixtures/webmcp-demo/README.md)。
+
+1. 启动 cooperative fixture：
+
+   ```powershell
+   $env:MCP2WEBMCP_E2E_RELAY_PORT = "9333"
+   $env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18080"
+   pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
+   ```
+
+2. 访问 `http://127.0.0.1:18080`，页面状态应变为 `ready`。
+3. 使用 `configs/mcp-client.example.json` 配置并重载 `mcp2webmcp-demo`。
+4. `webmcp_list_tools` 应列出 `echo`、`get_page_title`、`add` 对应的带命名空间工具。
+
+`configs/demo.yaml` 的 origin、页面地址和 relay 端口必须一致。第二个 MCP-B Gateway 进程可按 client mode 加入已有 relay；这一行为只属于 MCP-B 路径。
+
+## 验收标准
+
+- MCP Client 显示 Gateway 已连接。
+- `webmcp_runtime_status` 返回运行状态。
+- `webmcp_list_sources` 能看到目标页面的精确 origin。
+- `webmcp_list_tools` 能看到目标工具；投影名称带命名空间，不保证等于裸 `echo`。
+- 调用示例 `echo` 返回 `echo:hello`。
+
+## 客户端侧常见问题
+
+- **启动时报缺少 Extension token**：MCP 配置的 `MCP2WEBMCP_EXTENSION_TOKEN` 未设置，或使用了 Extension yaml 却没有注入令牌。
+- **扩展显示未连接**：检查扩展“连接设置”中的令牌与 MCP 配置一致，并确认没有旧进程占用 9334。
+- **工具列表为空**：核对页面地址栏的精确 origin、同意账本和 policy；`localhost` 与 `127.0.0.1` 不是同一 origin。
+- **`POLICY_DENIED`**：查看 Side Panel 的工具模式、同意状态和 yaml policy；插件活动页会显示 Gateway 拦截原因。
+- **`CONFIRMATION_UNAVAILABLE`**：调用需要确认，但扩展已断线、没有可用确认通道或等待超时；工具未执行。
+- **`EADDRINUSE`**：不要手动和 MCP Client 同时启动相同 Extension 配置；9333 属于 MCP-B relay，9334 属于 Extension loopback。
+- **`OUTCOME_UNKNOWN`**：页面可能已经产生副作用，不要自动重试非幂等操作。
+
+更完整的日志定位见 [运维与测试](current/operations-and-testing.md#快速定位)。

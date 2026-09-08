@@ -117,12 +117,11 @@ export class ToolProjector {
     const selected: RuntimeTool[] = [];
     let omitted = 0;
     for (const tool of this.runtime.tools.list()) {
-      if (tool.status !== "available") continue;
       if ((MANAGEMENT_TOOL_NAMES as readonly string[]).includes(tool.identity.mcpName)) {
         omitted += 1;
         continue;
       }
-      const source = this.runtime.sources.get(tool.identity.adapterId, tool.sourceId);
+      const source = this.runtime.sources.get(tool.identity.adapterId, tool.identity.sourceId);
       if (!source || source.state !== "connected") continue;
       if (allowed.size > 0 && !allowed.has(source.origin)) {
         omitted += 1;

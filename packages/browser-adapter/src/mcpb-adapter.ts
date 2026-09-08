@@ -227,14 +227,11 @@ export class McpBAdapter implements BrowserAdapter {
         runtimeId: existing?.identity.runtimeId || "pending",
         mcpName: existing?.identity.mcpName || incoming.originalName,
       },
-      sourceId: source.sourceId,
-      sourceGeneration: source.generation,
       description: incoming.description,
       inputSchema: incoming.inputSchema,
       annotations: incoming.annotations,
       discoveredAt: existing?.discoveredAt ?? now,
       updatedAt: now,
-      status: "available",
     };
     bucket.set(incoming.originalName, complete);
     this.tools.set(source.sourceId, bucket);

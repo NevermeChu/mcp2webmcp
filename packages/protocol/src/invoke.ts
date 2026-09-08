@@ -1,6 +1,7 @@
 import type { BrowserSource } from "./source.js";
 import type { RuntimeTool } from "./tool.js";
 import type { InvokeOutcome, RuntimeErrorCode } from "./errors.js";
+import type { PolicyAction } from "./policy.js";
 
 export interface RuntimeInvokeRequest {
   requestId: string;
@@ -28,16 +29,7 @@ export interface RuntimeInvokeError {
   outcome: InvokeOutcome;
 }
 
-export interface RuntimeInvokeConfirmationRequired {
-  status: "confirmation_required";
-  confirmationId: string;
-  summary: string;
-}
-
-export type RuntimeInvokeResult =
-  | RuntimeInvokeSuccess
-  | RuntimeInvokeError
-  | RuntimeInvokeConfirmationRequired;
+export type RuntimeInvokeResult = RuntimeInvokeSuccess | RuntimeInvokeError;
 
 export interface BrowserToolInvokeRequest {
   requestId: string;
@@ -51,6 +43,27 @@ export interface BrowserToolInvokeResult {
   content: unknown[];
   structuredContent?: unknown;
   isError?: boolean;
+}
+
+export interface BrowserConfirmationRequest {
+  requestId: string;
+  sourceId: string;
+  sourceGeneration: number;
+  origin: string;
+  originalName: string;
+  mcpName: string;
+  inputPreview?: string;
+  clientName?: string;
+}
+
+export interface BrowserInvocationDecision {
+  requestId: string;
+  sourceId: string;
+  originalName: string;
+  action: PolicyAction;
+  reason?: string;
+  errorCode?: RuntimeErrorCode;
+  timestamp: number;
 }
 
 export interface BrowserAdapterEventMeta {
@@ -81,6 +94,11 @@ export interface BrowserAdapter {
     request: BrowserToolInvokeRequest,
     options: { signal: AbortSignal; deadline: number },
   ): Promise<BrowserToolInvokeResult>;
+  requestConfirmation?(
+    request: BrowserConfirmationRequest,
+    options: { signal: AbortSignal; deadline: number },
+  ): Promise<boolean>;
+  notifyInvocationDecision?(decision: BrowserInvocationDecision): void;
   subscribe(handler: (event: BrowserAdapterEvent) => void): () => void;
 }
 

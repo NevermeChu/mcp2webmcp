@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { McpBAdapter } from "./mcpb-adapter.js";
-import { demoRelaySource, demoRelayTool, FakeRelayBridge } from "./fake-relay-bridge.js";
+import {
+  demoRelaySource,
+  demoRelayTool,
+  FakeRelayBridge,
+} from "../test-fixtures/fake-relay-bridge.js";
 import {
   assertExplicitOrigins,
   assertLoopbackHost,

@@ -28,9 +28,9 @@ describe("NamespaceResolver", () => {
     expect(a.mcpName).not.toBe(b.mcpName);
   });
 
-  it("differs for the same origin and different profile via sourceId", () => {
-    const a = names.resolve(testSource({ profileId: "p1", sourceId: "s1" }), "search");
-    const b = names.resolve(testSource({ profileId: "p2", sourceId: "s2" }), "search");
+  it("differs for the same origin and different sourceId", () => {
+    const a = names.resolve(testSource({ sourceId: "s1" }), "search");
+    const b = names.resolve(testSource({ sourceId: "s2" }), "search");
     expect(a.runtimeId).not.toBe(b.runtimeId);
   });
 

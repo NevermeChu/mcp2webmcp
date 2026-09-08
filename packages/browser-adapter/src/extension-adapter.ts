@@ -2,11 +2,15 @@ import {
   RuntimeError,
   type BrowserAdapter,
   type BrowserAdapterEvent,
+  type BrowserConfirmationRequest,
+  type BrowserInvocationDecision,
   type BrowserSource,
   type BrowserToolInvokeRequest,
   type BrowserToolInvokeResult,
   type RuntimeLog,
   type RuntimeTool,
+  type ToolPolicyMode,
+  type ToolPolicyOverride,
 } from "@mcp2webmcp/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
@@ -37,6 +41,12 @@ export interface ExtensionAdapterOptions {
   /** Grace period before a dropped WebSocket's sources are removed. 0 disables. */
   disconnectGraceMs?: number;
   log?: RuntimeLog;
+  policyControl?: {
+    get(origin: string, originalName: string): ToolPolicyOverride | undefined;
+    list(): ToolPolicyOverride[];
+    set(origin: string, originalName: string, mode: ToolPolicyMode): ToolPolicyOverride;
+    effective(source: BrowserSource, tool: RuntimeTool): ToolPolicyMode;
+  };
 }
 
 interface PendingInvoke {
@@ -45,6 +55,11 @@ interface PendingInvoke {
   resolve: (result: BrowserToolInvokeResult) => void;
   reject: (error: Error) => void;
   abort: () => void;
+}
+
+interface PendingConfirmation {
+  resolve: (approved: boolean) => void;
+  reject: (error: Error) => void;
 }
 
 interface SocketSession {
@@ -70,11 +85,13 @@ export class ExtensionAdapter implements BrowserAdapter {
   private readonly authToken: string;
   private readonly disconnectGraceMs: number;
   private readonly log?: RuntimeLog;
+  private readonly policyControl?: ExtensionAdapterOptions["policyControl"];
   private readonly listeners = new Set<(event: BrowserAdapterEvent) => void>();
   private readonly sources = new Map<string, BrowserSource>();
   private readonly sourceGenerations = new Map<string, number>();
   private readonly tools = new Map<string, Map<string, RuntimeTool>>();
   private readonly pending = new Map<string, PendingInvoke>();
+  private readonly pendingConfirmations = new Map<string, PendingConfirmation>();
   private readonly pingWaiters = new Map<string, () => void>();
 
   constructor(options: ExtensionAdapterOptions) {
@@ -92,6 +109,7 @@ export class ExtensionAdapter implements BrowserAdapter {
     this.authToken = options.authToken;
     this.disconnectGraceMs = options.disconnectGraceMs ?? 15_000;
     this.log = options.log;
+    this.policyControl = options.policyControl;
   }
 
   get listenPort(): number {
@@ -129,6 +147,7 @@ export class ExtensionAdapter implements BrowserAdapter {
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = undefined;
     this.rejectAllPending(new Error("extension adapter stopped"));
+    this.rejectAllConfirmations("extension adapter stopped");
     this.dropSession();
     const server = this.server;
     this.server = undefined;
@@ -258,6 +277,68 @@ export class ExtensionAdapter implements BrowserAdapter {
     }
   }
 
+  async requestConfirmation(
+    request: BrowserConfirmationRequest,
+    options: { signal: AbortSignal; deadline: number },
+  ): Promise<boolean> {
+    if (!this.liveSession()) {
+      throw new RuntimeError(
+        "CONFIRMATION_UNAVAILABLE",
+        "extension is not connected for confirmation",
+        "not_executed",
+      );
+    }
+    if (options.signal.aborted || options.deadline <= Date.now()) {
+      throw new RuntimeError("CANCELLED", "confirmation cancelled", "not_executed");
+    }
+    return new Promise<boolean>((resolve, reject) => {
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        options.signal.removeEventListener("abort", onAbort);
+        this.pendingConfirmations.delete(request.requestId);
+        fn();
+      };
+      const onAbort = () => {
+        this.send({ type: "confirmation.resolved", requestId: request.requestId, approved: false });
+        finish(() =>
+          reject(new RuntimeError("CANCELLED", "confirmation cancelled", "not_executed")),
+        );
+      };
+      const timer = setTimeout(
+        () => {
+          this.send({
+            type: "confirmation.resolved",
+            requestId: request.requestId,
+            approved: false,
+          });
+          finish(() =>
+            reject(
+              new RuntimeError(
+                "CONFIRMATION_UNAVAILABLE",
+                "confirmation timed out",
+                "not_executed",
+              ),
+            ),
+          );
+        },
+        Math.max(1, options.deadline - Date.now()),
+      );
+      this.pendingConfirmations.set(request.requestId, {
+        resolve: (approved) => finish(() => resolve(approved)),
+        reject: (error) => finish(() => reject(error)),
+      });
+      options.signal.addEventListener("abort", onAbort, { once: true });
+      this.send({ type: "confirmation.request", ...request, deadline: options.deadline });
+    });
+  }
+
+  notifyInvocationDecision(decision: BrowserInvocationDecision): void {
+    this.send({ type: "invocation.decision", ...decision });
+  }
+
   private note(
     level: "debug" | "info" | "warn" | "error",
     event: string,
@@ -299,6 +380,7 @@ export class ExtensionAdapter implements BrowserAdapter {
       this.rejectAllPending(
         new RuntimeError("OUTCOME_UNKNOWN", "extension disconnected during invocation", "unknown"),
       );
+      this.rejectAllConfirmations("extension disconnected during confirmation");
       if (session.helloOk) {
         this.note("warn", "extension.ws.disconnected");
         this.scheduleGraceExpiry();
@@ -326,6 +408,7 @@ export class ExtensionAdapter implements BrowserAdapter {
         "unknown",
       ),
     );
+    this.rejectAllConfirmations("extension session replaced during confirmation");
   }
 
   private scheduleGraceExpiry(): void {
@@ -380,6 +463,7 @@ export class ExtensionAdapter implements BrowserAdapter {
         protocolVersion: EXTENSION_PROTOCOL_VERSION,
         adapterId: this.adapterId,
       });
+      this.sendPolicySnapshot(session);
       return;
     }
     if (!session.helloOk) return;
@@ -438,6 +522,7 @@ export class ExtensionAdapter implements BrowserAdapter {
         runtimeError: message.runtimeError,
       });
       this.replaceTools(message.sourceId, message.tools);
+      this.sendPolicySnapshot(session);
       return;
     }
     if (message.type === "invokeResult") {
@@ -466,6 +551,47 @@ export class ExtensionAdapter implements BrowserAdapter {
         structuredContent: message.structuredContent,
         isError: Boolean(message.isError),
       });
+      return;
+    }
+    if (message.type === "policy.set") {
+      if (!this.policyControl || !this.hasPublishedTool(message.origin, message.originalName)) {
+        this.sendTo(session, {
+          type: "policy.error",
+          requestId: message.requestId,
+          message: "tool is not currently published for this origin",
+        });
+        return;
+      }
+      try {
+        const previous = this.policyControl.get(message.origin, message.originalName);
+        const override = this.policyControl.set(message.origin, message.originalName, message.mode);
+        this.note("info", "policy.updated", {
+          origin: message.origin,
+          originalName: message.originalName,
+          previousMode: previous?.mode ?? "base",
+          mode: message.mode,
+          actor: "extension",
+        });
+        this.sendTo(session, { type: "policy.updated", requestId: message.requestId, override });
+        this.sendPolicySnapshot(session);
+      } catch (error) {
+        this.sendTo(session, {
+          type: "policy.error",
+          requestId: message.requestId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
+    if (message.type === "confirmation.respond") {
+      const pending = this.pendingConfirmations.get(message.requestId);
+      if (!pending) return;
+      this.sendTo(session, {
+        type: "confirmation.resolved",
+        requestId: message.requestId,
+        approved: message.approved,
+      });
+      pending.resolve(message.approved);
     }
   }
 
@@ -562,20 +688,17 @@ export class ExtensionAdapter implements BrowserAdapter {
         runtimeId: existing?.identity.runtimeId || "pending",
         mcpName: existing?.identity.mcpName || incoming.originalName,
       },
-      sourceId: source.sourceId,
-      sourceGeneration: source.generation,
       description: incoming.description,
       inputSchema: incoming.inputSchema,
       annotations: incoming.annotations,
       discoveredAt: existing?.discoveredAt ?? now,
       updatedAt: now,
-      status: "available",
     };
     bucket.set(incoming.originalName, complete);
     this.tools.set(source.sourceId, bucket);
     if (
       existing &&
-      existing.sourceGeneration === complete.sourceGeneration &&
+      existing.identity.sourceGeneration === complete.identity.sourceGeneration &&
       toolSnapshotKey(existing) === toolSnapshotKey(complete)
     ) {
       return;
@@ -681,6 +804,54 @@ export class ExtensionAdapter implements BrowserAdapter {
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  private rejectAllConfirmations(message: string): void {
+    const error = new RuntimeError("CONFIRMATION_UNAVAILABLE", message, "not_executed");
+    for (const pending of this.pendingConfirmations.values()) pending.reject(error);
+    this.pendingConfirmations.clear();
+  }
+
+  private hasPublishedTool(origin: string, originalName: string): boolean {
+    for (const [sourceId, source] of this.sources) {
+      if (
+        source.origin === origin &&
+        source.state === "connected" &&
+        this.tools.get(sourceId)?.has(originalName)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private sendPolicySnapshot(session: SocketSession): void {
+    if (!this.policyControl) return;
+    try {
+      const entries = new Map<string, ToolPolicyOverride>(
+        this.policyControl
+          .list()
+          .map((entry) => [`${entry.origin}\u0000${entry.originalName}`, entry] as const),
+      );
+      for (const [sourceId, source] of this.sources) {
+        for (const tool of this.tools.get(sourceId)?.values() ?? []) {
+          const key = `${source.origin}\u0000${tool.identity.originalName}`;
+          if (!entries.has(key)) {
+            entries.set(key, {
+              origin: source.origin,
+              originalName: tool.identity.originalName,
+              mode: this.policyControl.effective(source, tool),
+              updatedAt: 0,
+            });
+          }
+        }
+      }
+      this.sendTo(session, { type: "policy.snapshot", overrides: [...entries.values()] });
+    } catch (error) {
+      this.note("error", "policy.snapshot.failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private emit(event: BrowserAdapterEvent): void {

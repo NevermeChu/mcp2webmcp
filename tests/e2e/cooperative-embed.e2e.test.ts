@@ -58,7 +58,11 @@ describe("cooperative embed E2E (not extension zero-integration)", () => {
     await listen(fixtureB, portB);
     await listen(fixtureC, portC);
     browser = await launchBrowser();
-    gateway = await connectGateway(repoRoot, configPath, path.join(tmpDir, "gw-primary.stderr.log"));
+    gateway = await connectGateway(
+      repoRoot,
+      configPath,
+      path.join(tmpDir, "gw-primary.stderr.log"),
+    );
   }, 60_000);
 
   afterEach(async () => {
@@ -130,7 +134,11 @@ describe("cooperative embed E2E (not extension zero-integration)", () => {
     await waitForOriginal(first.client, "echo", originA);
     await waitForOriginal(first.client, "echo", originB);
 
-    const second = await connectGateway(repoRoot, configPath, path.join(tmpDir, "gw-share-2.stderr.log"));
+    const second = await connectGateway(
+      repoRoot,
+      configPath,
+      path.join(tmpDir, "gw-share-2.stderr.log"),
+    );
     const echoOnSecond = await waitForOriginal(second.client, "echo", originA);
     const shared = await second.client.callTool({
       name: echoOnSecond.mcpName,

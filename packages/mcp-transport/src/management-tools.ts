@@ -32,14 +32,13 @@ export function createManagementHandlers(
     async listTools() {
       return jsonText(
         runtime.tools.list().map((tool) => {
-          const source = runtime.sources.get(tool.identity.adapterId, tool.sourceId);
+          const source = runtime.sources.get(tool.identity.adapterId, tool.identity.sourceId);
           return {
             runtimeId: tool.identity.runtimeId,
             mcpName: tool.identity.mcpName,
             originalName: tool.identity.originalName,
             origin: source?.origin,
-            status: tool.status,
-            sourceGeneration: tool.sourceGeneration,
+            sourceGeneration: tool.identity.sourceGeneration,
             consented:
               !runtime.consent.enabled ||
               Boolean(source && runtime.consent.allows(source.origin, tool.identity.originalName)),
@@ -60,7 +59,7 @@ export function createManagementHandlers(
           isError: true,
         };
       }
-      const source = runtime.sources.get(tool.identity.adapterId, tool.sourceId);
+      const source = runtime.sources.get(tool.identity.adapterId, tool.identity.sourceId);
       return jsonText({ tool, source });
     },
 

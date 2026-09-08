@@ -5,11 +5,14 @@ import {
   type LogHop,
   type LogLevel,
   type ToolAnnotations,
+  type RuntimeErrorCode,
+  type ToolPolicyMode,
+  type ToolPolicyOverride,
 } from "@mcp2webmcp/protocol";
 import { stripPageAnnotations } from "./page-annotations.js";
 
 export const EXTENSION_PROTOCOL = "mcp2webmcp-extension";
-export const EXTENSION_PROTOCOL_VERSION = 2;
+export const EXTENSION_PROTOCOL_VERSION = 3;
 export const DEFAULT_EXTENSION_PORT = 9334;
 export const MAX_EXTENSION_TOOLS_PER_SNAPSHOT = 500;
 
@@ -59,6 +62,14 @@ export type ExtensionClientMessage =
       isError?: boolean;
       error?: { message: string; code?: "OUTCOME_UNKNOWN" };
     }
+  | {
+      type: "policy.set";
+      requestId: string;
+      origin: string;
+      originalName: string;
+      mode: ToolPolicyMode;
+    }
+  | { type: "confirmation.respond"; requestId: string; approved: boolean }
   | { type: "ping"; id: string }
   | { type: "pong"; id: string }
   | {
@@ -89,6 +100,32 @@ export type ExtensionServerMessage =
       deadline?: number;
     }
   | { type: "invokeCancel"; requestId: string; sourceId: string; sourceGeneration: number }
+  | { type: "policy.snapshot"; overrides: ToolPolicyOverride[] }
+  | { type: "policy.updated"; requestId: string; override: ToolPolicyOverride }
+  | { type: "policy.error"; requestId: string; message: string }
+  | {
+      type: "confirmation.request";
+      requestId: string;
+      sourceId: string;
+      sourceGeneration: number;
+      origin: string;
+      originalName: string;
+      mcpName: string;
+      inputPreview?: string;
+      clientName?: string;
+      deadline: number;
+    }
+  | { type: "confirmation.resolved"; requestId: string; approved: boolean }
+  | {
+      type: "invocation.decision";
+      requestId: string;
+      sourceId: string;
+      originalName: string;
+      action: ToolPolicyMode;
+      reason?: string;
+      errorCode?: RuntimeErrorCode;
+      timestamp: number;
+    }
   | { type: "ping"; id: string }
   | { type: "pong"; id: string };
 
@@ -197,6 +234,29 @@ export function parseExtensionClientMessage(raw: string): ExtensionClientMessage
             }
           : undefined,
     };
+  }
+  if (type === "policy.set") {
+    if (
+      typeof msg.requestId !== "string" ||
+      typeof msg.origin !== "string" ||
+      typeof msg.originalName !== "string" ||
+      (msg.mode !== "allow" && msg.mode !== "confirm" && msg.mode !== "deny")
+    ) {
+      return undefined;
+    }
+    return {
+      type: "policy.set",
+      requestId: msg.requestId,
+      origin: msg.origin,
+      originalName: msg.originalName,
+      mode: msg.mode,
+    };
+  }
+  if (type === "confirmation.respond") {
+    if (typeof msg.requestId !== "string" || typeof msg.approved !== "boolean") {
+      return undefined;
+    }
+    return { type: "confirmation.respond", requestId: msg.requestId, approved: msg.approved };
   }
   if (type === "ping" || type === "pong") {
     if (typeof msg.id !== "string") return undefined;

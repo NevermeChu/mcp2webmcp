@@ -136,8 +136,8 @@ export class LifecycleManager {
         this.events.publish({
           type: "tool.removed",
           runtimeId: tool.identity.runtimeId,
-          sourceId: tool.sourceId,
-          sourceGeneration: tool.sourceGeneration,
+          sourceId: tool.identity.sourceId,
+          sourceGeneration: tool.identity.sourceGeneration,
         });
       }
     }
@@ -160,8 +160,8 @@ export class LifecycleManager {
       this.events.publish({
         type: "tool.removed",
         runtimeId: tool.identity.runtimeId,
-        sourceId: tool.sourceId,
-        sourceGeneration: tool.sourceGeneration,
+        sourceId: tool.identity.sourceId,
+        sourceGeneration: tool.identity.sourceGeneration,
       });
     }
     this.sources.remove(adapterId, sourceId);
@@ -174,8 +174,8 @@ export class LifecycleManager {
   }
 
   private upsertTool(adapterId: string, incoming: RuntimeTool, revision: number): void {
-    const source = this.sources.get(adapterId, incoming.sourceId);
-    if (!source || source.generation !== incoming.sourceGeneration) {
+    const source = this.sources.get(adapterId, incoming.identity.sourceId);
+    if (!source || source.generation !== incoming.identity.sourceGeneration) {
       return;
     }
     const identity = this.names.resolve(source, incoming.identity.originalName);
@@ -183,21 +183,21 @@ export class LifecycleManager {
       this.tools.get(identity.runtimeId) ?? this.tools.getByMcpName(identity.mcpName);
     if (!previous) {
       if (this.tools.list().length >= this.limits.maxToolsTotal) return;
-      if (this.tools.countBySource(adapterId, incoming.sourceId) >= this.limits.maxToolsPerSource) {
+      if (
+        this.tools.countBySource(adapterId, incoming.identity.sourceId) >=
+        this.limits.maxToolsPerSource
+      ) {
         return;
       }
     }
     const tool: RuntimeTool = {
       ...incoming,
       identity,
-      sourceId: source.sourceId,
-      sourceGeneration: source.generation,
-      status: "available",
       updatedAt: Date.now(),
     };
     this.tools.register(tool);
-    this.last.set(sourceKey(adapterId, incoming.sourceId), {
-      generation: incoming.sourceGeneration,
+    this.last.set(sourceKey(adapterId, incoming.identity.sourceId), {
+      generation: incoming.identity.sourceGeneration,
       revision,
     });
     if (this.consent?.admit(source.origin, identity.originalName)) {
@@ -227,8 +227,8 @@ export class LifecycleManager {
       this.events.publish({
         type: "tool.removed",
         runtimeId: tool.identity.runtimeId,
-        sourceId: tool.sourceId,
-        sourceGeneration: tool.sourceGeneration,
+        sourceId: tool.identity.sourceId,
+        sourceGeneration: tool.identity.sourceGeneration,
       });
     }
     this.last.set(sourceKey(event.adapterId, event.sourceId), {

@@ -16,7 +16,7 @@ export class ToolRegistry {
     }
     this.byRuntimeId.set(tool.identity.runtimeId, tool);
     this.byMcpName.set(tool.identity.mcpName, tool.identity.runtimeId);
-    const key = sourceKey(tool.identity.adapterId, tool.sourceId);
+    const key = sourceKey(tool.identity.adapterId, tool.identity.sourceId);
     const set = this.bySource.get(key) ?? new Set<string>();
     set.add(tool.identity.runtimeId);
     this.bySource.set(key, set);
@@ -29,7 +29,7 @@ export class ToolRegistry {
     if (this.byMcpName.get(tool.identity.mcpName) === runtimeId) {
       this.byMcpName.delete(tool.identity.mcpName);
     }
-    const key = sourceKey(tool.identity.adapterId, tool.sourceId);
+    const key = sourceKey(tool.identity.adapterId, tool.identity.sourceId);
     const set = this.bySource.get(key);
     set?.delete(runtimeId);
     if (set && set.size === 0) this.bySource.delete(key);
@@ -67,7 +67,7 @@ export class ToolRegistry {
       const tool = this.byRuntimeId.get(runtimeId);
       if (!tool) continue;
       if (tool.identity.originalName !== originalName) continue;
-      if (generation !== undefined && tool.sourceGeneration !== generation) continue;
+      if (generation !== undefined && tool.identity.sourceGeneration !== generation) continue;
       return tool;
     }
     return undefined;

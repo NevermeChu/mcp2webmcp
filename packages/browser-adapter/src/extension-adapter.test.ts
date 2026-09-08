@@ -547,6 +547,83 @@ describe("ExtensionAdapter", () => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(await adapter.listSources()).toHaveLength(1);
   });
+
+  it("persists a policy selection only for a currently published tool", async () => {
+    const overrides: Array<{
+      origin: string;
+      originalName: string;
+      mode: "allow" | "confirm" | "deny";
+      updatedAt: number;
+    }> = [];
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: [],
+      port: 0,
+      authToken: TEST_TOKEN,
+      policyControl: {
+        get: (origin, originalName) =>
+          overrides.find((entry) => entry.origin === origin && entry.originalName === originalName),
+        list: () => overrides,
+        set: (origin, originalName, mode) => {
+          const entry = { origin, originalName, mode, updatedAt: Date.now() };
+          overrides.splice(0, overrides.length, entry);
+          return entry;
+        },
+        effective: () => "allow",
+      },
+    });
+    adapters.push(adapter);
+    await adapter.start();
+    const client = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(client);
+    await client.hello();
+    client.send({
+      type: "source.upsert",
+      sourceId: "tab:9",
+      tabId: "9",
+      origin: "https://example.test",
+      url: "https://example.test/",
+    });
+    client.send({
+      type: "tools.replace",
+      sourceId: "tab:9",
+      tools: [{ originalName: "echo", inputSchema: {} }],
+    });
+    await waitFor(async () => (await adapter.listTools("tab:9")).length === 1);
+    client.send({
+      type: "policy.set",
+      requestId: "policy-1",
+      origin: "https://example.test",
+      originalName: "echo",
+      mode: "deny",
+    });
+    const updated = await client.waitFor((message) => message.type === "policy.updated");
+    expect(updated).toMatchObject({
+      type: "policy.updated",
+      override: { originalName: "echo", mode: "deny" },
+    });
+  });
+
+  it("waits for a one-call confirmation response before resolving", async () => {
+    const { adapter, client } = await boot([]);
+    const confirmation = adapter.requestConfirmation(
+      {
+        requestId: "confirm-1",
+        sourceId: "tab:10",
+        sourceGeneration: 1,
+        origin: "https://example.test",
+        originalName: "write",
+        mcpName: "write",
+        inputPreview: "fields: value",
+      },
+      { signal: new AbortController().signal, deadline: Date.now() + 2_000 },
+    );
+    await client.waitFor(
+      (message) => message.type === "confirmation.request" && message.requestId === "confirm-1",
+    );
+    client.send({ type: "confirmation.respond", requestId: "confirm-1", approved: true });
+    await expect(confirmation).resolves.toBe(true);
+  });
 });
 
 async function waitFor(

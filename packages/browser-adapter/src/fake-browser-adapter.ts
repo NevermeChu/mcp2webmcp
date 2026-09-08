@@ -17,7 +17,6 @@ export interface FakeToolHandler {
 export class FakeBrowserAdapter implements BrowserAdapter {
   readonly type = "fake";
   private revision = 0;
-  private started = false;
   private readonly sources = new Map<string, BrowserSource>();
   private readonly tools = new Map<string, Map<string, RuntimeTool>>();
   private readonly handlers = new Map<string, FakeToolHandler>();
@@ -25,12 +24,9 @@ export class FakeBrowserAdapter implements BrowserAdapter {
 
   constructor(readonly adapterId: string) {}
 
-  async start(): Promise<void> {
-    this.started = true;
-  }
+  async start(): Promise<void> {}
 
   async stop(): Promise<void> {
-    this.started = false;
     this.listeners.clear();
   }
 
@@ -67,9 +63,11 @@ export class FakeBrowserAdapter implements BrowserAdapter {
     };
   }
 
-  connectSource(input: Omit<BrowserSource, "adapterId" | "adapterType" | "state" | "updatedAt"> & {
-    state?: BrowserSource["state"];
-  }): BrowserSource {
+  connectSource(
+    input: Omit<BrowserSource, "adapterId" | "adapterType" | "state" | "updatedAt"> & {
+      state?: BrowserSource["state"];
+    },
+  ): BrowserSource {
     const now = Date.now();
     const source: BrowserSource = {
       ...input,
@@ -125,14 +123,11 @@ export class FakeBrowserAdapter implements BrowserAdapter {
     return source;
   }
 
-  registerTool(sourceId: string, tool: Omit<RuntimeTool, "sourceId" | "sourceGeneration" | "status">): RuntimeTool {
+  registerTool(sourceId: string, tool: RuntimeTool): RuntimeTool {
     const source = this.sources.get(sourceId);
     if (!source) throw new Error(`unknown source ${sourceId}`);
     const complete: RuntimeTool = {
       ...tool,
-      sourceId,
-      sourceGeneration: source.generation,
-      status: "available",
       identity: {
         ...tool.identity,
         adapterId: this.adapterId,
@@ -190,7 +185,7 @@ export class FakeBrowserAdapter implements BrowserAdapter {
 export function discoveredTool(
   originalName: string,
   inputSchema: Record<string, unknown> = { type: "object", properties: {} },
-): Omit<RuntimeTool, "sourceId" | "sourceGeneration" | "status"> {
+): RuntimeTool {
   const now = Date.now();
   return {
     identity: {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PolicyEngine } from "./policy-engine.js";
 import { MemoryConsentStore } from "./consent-store.js";
+import { MemoryPolicyOverrideStore } from "./policy-override-store.js";
 import { NamespaceResolver } from "../routing/namespace-resolver.js";
 import { testConfig, testSource } from "../../../../tests/helpers.js";
 
@@ -10,13 +11,10 @@ function context(originalName: string, extra?: { destructive?: boolean; origin?:
   return {
     tool: {
       identity,
-      sourceId: source.sourceId,
-      sourceGeneration: source.generation,
       inputSchema: {},
       annotations: extra?.destructive ? { destructiveHint: true } : undefined,
       discoveredAt: 1,
       updatedAt: 1,
-      status: "available" as const,
     },
     source,
     input: {},
@@ -34,9 +32,9 @@ describe("PolicyEngine", () => {
     expect(engine.evaluate(context("unknown_tool")).action).toBe("deny");
   });
 
-  it("upgrades allow to confirm when destructiveHint is set", () => {
+  it("does not override an explicit allow rule from page annotations", () => {
     expect(engine.evaluate(context("search_documents", { destructive: true })).action).toBe(
-      "confirm",
+      "allow",
     );
   });
 
@@ -80,5 +78,21 @@ describe("PolicyEngine", () => {
       consent,
     );
     expect(withConsent.evaluate(context("echo")).action).toBe("deny");
+  });
+
+  it("lets an exact user override win over yaml and consent", () => {
+    const overrides = new MemoryPolicyOverrideStore();
+    overrides.set("https://knowmesh.app", "echo", "allow");
+    const withOverride = new PolicyEngine(
+      {
+        default: "deny",
+        rules: [{ match: { origin: "https://knowmesh.app", tool: "echo" }, action: "deny" }],
+      },
+      undefined,
+      overrides,
+    );
+    expect(withOverride.evaluate(context("echo")).action).toBe("allow");
+    overrides.set("https://knowmesh.app", "echo", "confirm");
+    expect(withOverride.evaluate(context("echo")).action).toBe("confirm");
   });
 });

@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:e2e:extension": "vitest run --config vitest.e2e.extension.config.ts",
+    "docs:check": "node scripts/check-doc-links.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

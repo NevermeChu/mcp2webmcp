@@ -134,9 +134,6 @@ runtime:
   name: mcp2webmcp-e2e
   logLevel: warn
   invocationDeadlineMs: 65000
-mcp:
-  stdio:
-    enabled: true
 browser:
   adapter: mcpb
   allowedOrigins:
@@ -185,9 +182,6 @@ runtime:
   name: mcp2webmcp-e2e-extension
   logLevel: warn
   invocationDeadlineMs: 65000
-mcp:
-  stdio:
-    enabled: true
 browser:
   adapter: extension
   allowedOrigins:

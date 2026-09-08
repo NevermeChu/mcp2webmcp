@@ -5,10 +5,6 @@ runtime:
   name: mcp2webmcp
   logLevel: info
 
-mcp:
-  stdio:
-    enabled: true
-
 browser:
   adapter: mcpb
   allowedOrigins:

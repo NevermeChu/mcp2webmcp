@@ -2,7 +2,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { FakeRelayBridge, McpBAdapter, demoRelaySource, demoRelayTool } from "@mcp2webmcp/browser-adapter";
+import { McpBAdapter } from "@mcp2webmcp/browser-adapter";
+import {
+  FakeRelayBridge,
+  demoRelaySource,
+  demoRelayTool,
+} from "../../packages/browser-adapter/test-fixtures/fake-relay-bridge.js";
 import { createRuntime } from "@mcp2webmcp/core";
 import { testConfig } from "../helpers.js";
 
@@ -18,7 +23,10 @@ describe("McpBAdapter through Core policy", () => {
     const relay = new FakeRelayBridge();
     relay.setSnapshot(
       [demoRelaySource()],
-      [demoRelayTool(), demoRelayTool({ originalName: "extra_ping", invokeName: "extra_ping_aaaa" })],
+      [
+        demoRelayTool(),
+        demoRelayTool({ originalName: "extra_ping", invokeName: "extra_ping_aaaa" }),
+      ],
     );
     const runtime = createRuntime(
       testConfig({

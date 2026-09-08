@@ -1,13 +1,25 @@
 import type { PolicyConfig, PolicyContext, PolicyDecision, PolicyRule } from "@mcp2webmcp/protocol";
 import type { ConsentStore } from "./consent-store.js";
+import type { PolicyOverrideStore } from "./policy-override-store.js";
 
 export class PolicyEngine {
   constructor(
     private readonly config: PolicyConfig,
     private readonly consent?: ConsentStore,
+    private readonly overrides?: PolicyOverrideStore,
   ) {}
 
   evaluate(context: PolicyContext): PolicyDecision {
+    let override: ReturnType<PolicyOverrideStore["get"]>;
+    try {
+      override = this.overrides?.get(context.source.origin, context.tool.identity.originalName);
+    } catch {
+      return { action: "deny", reason: "policy override store is unreadable" };
+    }
+    if (override) {
+      if (override.mode === "allow") return { action: "allow" };
+      return { action: override.mode, reason: `user override: ${override.mode}` };
+    }
     let decision: PolicyDecision =
       this.config.default === "allow"
         ? { action: "allow" }
@@ -22,13 +34,14 @@ export class PolicyEngine {
       }
     }
 
-    if (!matched && this.consent?.enabled && this.consent.allows(context.source.origin, context.tool.identity.originalName)) {
+    if (
+      !matched &&
+      this.consent?.enabled &&
+      this.consent.allows(context.source.origin, context.tool.identity.originalName)
+    ) {
       decision = { action: "allow" };
     }
 
-    if (decision.action === "allow" && context.tool.annotations?.destructiveHint) {
-      return { action: "confirm", reason: "destructiveHint upgrades allow to confirm" };
-    }
     return decision;
   }
 

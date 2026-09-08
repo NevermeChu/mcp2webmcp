@@ -23,6 +23,7 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm lint
+      - run: pnpm docs:check
 
   e2e-cooperative-embed:
     runs-on: ubuntu-latest

@@ -87,6 +87,49 @@ describe("ToolRouter", () => {
     });
   });
 
+  it("dispatches only after approval and keeps a denied call unexecuted", async () => {
+    const { rt, adapter } = await setup("echo");
+    adapter.registerTool("tab-18", {
+      ...discoveredTool("delete_me"),
+      annotations: { destructiveHint: true },
+    });
+    const tool = rt.tools.list().find((item) => item.identity.originalName === "delete_me");
+    let executed = 0;
+    adapter.setHandler("tab-18", "delete_me", async () => {
+      executed += 1;
+      return { content: [] };
+    });
+    Object.assign(adapter, { requestConfirmation: async () => true });
+    const approved = await rt.router.invoke(
+      {
+        requestId: "confirm-approved",
+        target: { runtimeId: tool?.identity.runtimeId ?? "" },
+        input: {},
+        client: { processInstanceId: "proc-1" },
+      },
+      invokeOptions(),
+    );
+    expect(approved.status).toBe("success");
+    expect(executed).toBe(1);
+
+    Object.assign(adapter, { requestConfirmation: async () => false });
+    const denied = await rt.router.invoke(
+      {
+        requestId: "confirm-denied",
+        target: { runtimeId: tool?.identity.runtimeId ?? "" },
+        input: {},
+        client: { processInstanceId: "proc-1" },
+      },
+      invokeOptions(),
+    );
+    expect(denied).toMatchObject({
+      status: "error",
+      error: { code: "CONFIRMATION_DENIED" },
+      outcome: "not_executed",
+    });
+    expect(executed).toBe(1);
+  });
+
   it("does not dispatch when generation changes after policy", async () => {
     const { rt, tool } = await setup("echo");
     const source = rt.sources.get("fake-1", "tab-18");
@@ -202,9 +245,9 @@ describe("ToolRouter", () => {
       invokeOptions(),
     );
     const results = await Promise.all([first, second]);
-    expect(results.some((item) => item.status === "error" && item.error.code === "RATE_LIMITED")).toBe(
-      true,
-    );
+    expect(
+      results.some((item) => item.status === "error" && item.error.code === "RATE_LIMITED"),
+    ).toBe(true);
   });
 
   it("rejects oversized input", async () => {

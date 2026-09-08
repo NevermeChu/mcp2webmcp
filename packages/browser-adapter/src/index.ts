@@ -10,7 +10,16 @@ export {
   EXTENSION_PROTOCOL,
   EXTENSION_PROTOCOL_VERSION,
 } from "./extension-protocol.js";
-/** Test doubles. Not used by the Gateway process. */
-export { FakeRelayBridge, demoRelaySource, demoRelayTool } from "./fake-relay-bridge.js";
-export type { McpbRelayBridge, McpbRelaySnapshot, McpbRelaySnapshotSource, McpbRelaySnapshotTool } from "./mcpb-bridge.js";
-export { assertExplicitOrigins, assertLoopbackHost, assertOriginPolicy, isLoopbackAddress, originIsAllowed } from "./mcpb-safety.js";
+export type {
+  McpbRelayBridge,
+  McpbRelaySnapshot,
+  McpbRelaySnapshotSource,
+  McpbRelaySnapshotTool,
+} from "./mcpb-bridge.js";
+export {
+  assertExplicitOrigins,
+  assertLoopbackHost,
+  assertOriginPolicy,
+  isLoopbackAddress,
+  originIsAllowed,
+} from "./mcpb-safety.js";

@@ -68,7 +68,8 @@ body {
   line-height: 1.45;
 }
 button,
-input {
+input,
+select {
   font: inherit;
 }
 button {
@@ -84,16 +85,6 @@ button {
   flex-direction: column;
   background: var(--app);
 }
-.popup-mode {
-  width: 380px;
-  height: 600px;
-  overflow: hidden;
-}
-.popup-mode .app-shell {
-  height: 600px;
-  min-height: 600px;
-}
-
 .topbar {
   min-height: 57px;
   flex: 0 0 auto;
@@ -291,6 +282,59 @@ button {
 }
 .inline-error {
   font-size: 14px;
+}
+
+.confirmations-panel {
+  margin-bottom: 10px;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--line));
+  border-radius: 11px;
+  background: var(--warning-soft);
+}
+.confirmation-heading {
+  margin-bottom: 7px;
+  color: var(--warning);
+  font-size: 16px;
+  font-weight: 750;
+}
+.confirmation-card + .confirmation-card {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--warning) 22%, var(--line));
+}
+.confirmation-tool {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 720;
+}
+.confirmation-meta {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.confirmation-actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 8px;
+}
+.confirmation-actions button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.confirm-allow {
+  background: var(--success);
+  color: #fff;
+}
+.confirm-deny {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .page-card {
@@ -515,6 +559,27 @@ button {
 .tool-details {
   display: none;
   padding: 0 10px 10px 45px;
+}
+.policy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.policy-label {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 680;
+}
+.policy-select {
+  min-width: 108px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
 }
 .tool-item.open .tool-details {
   display: block;

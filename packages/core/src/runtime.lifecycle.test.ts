@@ -65,7 +65,6 @@ describe("LifecycleManager", () => {
         ...discoveredTool("echo"),
         sourceId: "tab-18",
         sourceGeneration: 1,
-        status: "available",
       },
     });
     expect(rt.sources.get("fake-1", "tab-18")?.generation).toBe(2);
@@ -110,7 +109,6 @@ describe("LifecycleManager", () => {
         ...discoveredTool("stale_echo"),
         sourceId: "tab-18",
         sourceGeneration: 1,
-        status: "available",
       },
     });
     expect(rt.tools.list().some((tool) => tool.identity.originalName === "stale_echo")).toBe(false);
@@ -127,6 +125,6 @@ describe("LifecycleManager", () => {
     adapter.registerTool("tab-18", discoveredTool("echo"));
     expect(rt.tools.list()).toHaveLength(1);
     expect(rt.tools.list()[0]?.identity.mcpName).toBe(before);
-    expect(rt.tools.list()[0]?.sourceGeneration).toBe(2);
+    expect(rt.tools.list()[0]?.identity.sourceGeneration).toBe(2);
   });
 });

@@ -16,7 +16,7 @@ v0.1 私有 JSON 协议：Chrome/Edge MV3 扩展把页面 WebMCP 工具搬到本
 - Gateway 将单帧限制为 1 MiB；`tools.replace` 每个快照最多 500 个工具。
 - 服务端只 bind `127.0.0.1`（或规范化后的 loopback）。非 loopback 远端一律断开。
 - 握手 `Origin` 头必须是 `chrome-extension://…`（浏览器对扩展 WebSocket 强制带此头，网页无法伪造）。其他 origin 一律 `4003` 拒绝，挡住网页对 loopback 端口的 drive-by 连接。
-- 共享令牌必填：Gateway yaml 配置 `browser.extension.authToken`，或通过环境变量 `MCP2WEBMCP_EXTENSION_TOKEN` 注入；`hello` 必须携带相同 `token`，否则 `4001` 关闭。扩展在 Side Panel「Gateway 鉴权令牌」里粘贴一次，存入 `chrome.storage.local`。
+- 共享令牌必填：Gateway yaml 配置 `browser.extension.authToken`，或通过环境变量 `MCP2WEBMCP_EXTENSION_TOKEN` 注入；`hello` 必须携带相同 `token`，否则 `4001` 关闭。扩展在底部“连接设置”里粘贴一次，存入 `chrome.storage.local`。
 - 协议名：`mcp2webmcp-extension`。版本：`2`。
 - 扩展先发 `hello`；Gateway 回 `helloAck` 后才处理业务帧。版本不匹配 `4002`；hello 10 秒内未完成 `4001` 关闭。
 - 一条扩展连接对应一个 Gateway 进程。**只有完成 hello 的新连接**才会取代旧连接（旧连接 `4000` 关闭）；未 hello 的新连接不会影响已建立的会话。
@@ -178,5 +178,13 @@ MV3 service worker 会睡。双方均可发 `ping`；对端回相同 `id` 的 `p
 ## 扩展侧约束
 
 - 隔离世界看不到 `document.modelContext`：MAIN world 先注入可删除的 runtime polyfill（若尚无 `registerTool`），再由 `content-main.js` 钩住 `registerTool` / 可选的 unregister。
-- 站点只 `registerTool`。有 runtime 无工具时快照 `runtimePresent: true` 且 `tools: []`（popup `0 tools`）。`no-webmcp-runtime` 仅在非 http(s)、非 secure、或挂载失败时出现。见 [ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)。
+- 站点只 `registerTool`。有 runtime 无工具时快照 `runtimePresent: true` 且 `tools: []`（Side Panel 显示 `0 tools`）。`no-webmcp-runtime` 仅在非 http(s)、非 secure、或挂载失败时出现。见 [ADR 0009](adr/0009-extension-webmcp-runtime-polyfill.md)。
 - 不在扩展里做 allowlist / namespace / audit。那些只在 Gateway yaml 与 Core。
+
+## 策略控制面（协议 v3）
+
+鉴权成功后 Gateway 发送 `policy.snapshot`。Side Panel 用 `policy.set` 提交精确 `origin + originalName + mode`，Gateway 校验该工具当前确实由该 origin 发布，持久化后返回 `policy.updated` 或 `policy.error`。扩展展示 Gateway 返回的有效模式，不在本地另建权威规则。
+
+命中 confirm 时，Gateway 在调用页面之前发送 `confirmation.request`，其中只有工具身份、MCP Client 名称、参数字段摘要和截止时间，不传参数值。Side Panel 以 `confirmation.respond` 返回本次允许或拒绝；Gateway 返回 `confirmation.resolved`，并在允许后重新检查 source generation 再转发。断线、取消、超时和拒绝均保持未执行。
+
+Gateway 通过 `invocation.decision` 把策略拒绝、确认拒绝和确认通道不可用的错误码与原因推给活动页。完整权威边界见 [ADR 0011](adr/0011-extension-policy-control.md)。

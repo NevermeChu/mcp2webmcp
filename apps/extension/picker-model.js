@@ -21,7 +21,16 @@
     if (tag === "a") return true;
     if (el.isContentEditable) return true;
     const role = (el.getAttribute("role") || "").toLowerCase();
-    return ["button", "link", "textbox", "checkbox", "switch", "menuitem", "tab", "combobox"].includes(role);
+    return [
+      "button",
+      "link",
+      "textbox",
+      "checkbox",
+      "switch",
+      "menuitem",
+      "tab",
+      "combobox",
+    ].includes(role);
   }
 
   function closestBindable(start) {
@@ -37,7 +46,8 @@
 
   function classify(el) {
     const tag = el.tagName.toLowerCase();
-    if (tag === "select" || (el.getAttribute("role") || "").toLowerCase() === "combobox") return "select";
+    if (tag === "select" || (el.getAttribute("role") || "").toLowerCase() === "combobox")
+      return "select";
     if (tag === "textarea" || el.isContentEditable) return "fill";
     if (tag === "input") {
       const type = (el.type || el.getAttribute("type") || "text").toLowerCase();
@@ -114,7 +124,13 @@
     const label = labelFor(el);
     const name = `${kind}_${slug(label)}`;
     const action =
-      kind === "fill" ? "Fill" : kind === "select" ? "Choose" : kind === "toggle" ? "Toggle" : "Click";
+      kind === "fill"
+        ? "Fill"
+        : kind === "select"
+          ? "Choose"
+          : kind === "toggle"
+            ? "Toggle"
+            : "Click";
     return {
       name,
       description: `${action} page control “${label}” (${el.tagName.toLowerCase()})`,
@@ -188,7 +204,9 @@
       return;
     }
     const proto =
-      el.tagName.toLowerCase() === "textarea" ? globalRef.HTMLTextAreaElement : globalRef.HTMLInputElement;
+      el.tagName.toLowerCase() === "textarea"
+        ? globalRef.HTMLTextAreaElement
+        : globalRef.HTMLInputElement;
     const desc = proto && Object.getOwnPropertyDescriptor(proto.prototype, "value");
     if (desc && typeof desc.set === "function") desc.set.call(el, value);
     else el.value = value;

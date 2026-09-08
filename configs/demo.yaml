@@ -6,10 +6,6 @@ runtime:
   logLevel: info
   # JSONL: ~/.mcp2webmcp/logs/mcp2webmcp-demo.jsonl unless logPath / MCP2WEBMCP_LOG_PATH is set.
 
-mcp:
-  stdio:
-    enabled: true
-
 browser:
   adapter: mcpb
   allowedOrigins:

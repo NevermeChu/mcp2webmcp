@@ -75,7 +75,13 @@ describe("picker-model", () => {
   it("walks up to a bindable ancestor", () => {
     const picker = loadPicker();
     const button = fakeEl("button", { innerText: "Go" });
-    const span = { nodeType: 1, tagName: "SPAN", parentElement: button, id: "", getAttribute: () => null };
+    const span = {
+      nodeType: 1,
+      tagName: "SPAN",
+      parentElement: button,
+      id: "",
+      getAttribute: () => null,
+    };
     button.parentElement = null;
     expect(picker.closestBindable(span)).toBe(button);
   });

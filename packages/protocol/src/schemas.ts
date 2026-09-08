@@ -2,26 +2,26 @@ import { z } from "zod";
 import { defaultResourceLimits } from "./config.js";
 import { defaultConsentConfig } from "./consent.js";
 
-export const adapterTypeSchema = z.enum(["extension", "cdp", "playwright", "mcpb", "fake"]);
+export const adapterTypeSchema = z.enum(["extension", "mcpb", "fake"]);
 
-export const sourceStateSchema = z.enum(["connected", "stale", "disconnected"]);
+export const sourceStateSchema = z.enum(["connected", "disconnected"]);
 
-export const browserSourceSchema = z.object({
-  adapterId: z.string().min(1),
-  sourceId: z.string().min(1),
-  generation: z.number().int().nonnegative(),
-  browserId: z.string().min(1),
-  profileId: z.string().optional(),
-  tabId: z.string().min(1),
-  frameId: z.string().optional(),
-  origin: z.string().min(1),
-  url: z.string().min(1),
-  title: z.string().optional(),
-  adapterType: adapterTypeSchema,
-  connectedAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-  state: sourceStateSchema,
-});
+export const browserSourceSchema = z
+  .object({
+    adapterId: z.string().min(1),
+    sourceId: z.string().min(1),
+    generation: z.number().int().nonnegative(),
+    browserId: z.string().min(1),
+    tabId: z.string().min(1),
+    origin: z.string().min(1),
+    url: z.string().min(1),
+    title: z.string().optional(),
+    adapterType: adapterTypeSchema,
+    connectedAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+    state: sourceStateSchema,
+  })
+  .strict();
 
 export const toolAnnotationsSchema = z
   .object({
@@ -41,17 +41,16 @@ export const toolIdentitySchema = z.object({
   mcpName: z.string().min(1).max(128),
 });
 
-export const runtimeToolSchema = z.object({
-  identity: toolIdentitySchema,
-  sourceId: z.string().min(1),
-  sourceGeneration: z.number().int().nonnegative(),
-  description: z.string().optional(),
-  inputSchema: z.record(z.unknown()),
-  annotations: toolAnnotationsSchema.optional(),
-  discoveredAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-  status: z.enum(["available", "stale", "unavailable"]),
-});
+export const runtimeToolSchema = z
+  .object({
+    identity: toolIdentitySchema,
+    description: z.string().optional(),
+    inputSchema: z.record(z.unknown()),
+    annotations: toolAnnotationsSchema.optional(),
+    discoveredAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const runtimeErrorCodeSchema = z.enum([
   "TOOL_NOT_FOUND",
@@ -59,8 +58,8 @@ export const runtimeErrorCodeSchema = z.enum([
   "SOURCE_NOT_FOUND",
   "SOURCE_DISCONNECTED",
   "POLICY_DENIED",
-  "CONFIRMATION_REQUIRED",
   "CONFIRMATION_UNAVAILABLE",
+  "CONFIRMATION_DENIED",
   "INVALID_INPUT",
   "CANCELLED",
   "INVOCATION_TIMEOUT",
@@ -114,6 +113,7 @@ export const policyConfigSchema = z
   .object({
     default: z.enum(["allow", "deny"]).default("deny"),
     rules: z.array(policyRuleSchema).default([]),
+    overridesPath: z.string().min(1).optional(),
   })
   .strict();
 
@@ -149,15 +149,6 @@ export const runtimeConfigSchema = z
         invocationDeadlineMs: z.number().int().positive().default(65_000),
       })
       .strict(),
-    mcp: z
-      .object({
-        stdio: z
-          .object({ enabled: z.boolean().default(true) })
-          .strict()
-          .default({ enabled: true }),
-      })
-      .strict()
-      .default({ stdio: { enabled: true } }),
     browser: z
       .object({
         adapter: z.enum(["fake", "mcpb", "extension"]).default("fake"),

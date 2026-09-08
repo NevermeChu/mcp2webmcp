@@ -1,6 +1,6 @@
-export { sourceKey, parseSourceKey } from "./identity.js";
+export { sourceKey } from "./identity.js";
 export type { AdapterType, BrowserSource, SourceState } from "./source.js";
-export type { RuntimeTool, ToolAnnotations, ToolIdentity, ToolStatus } from "./tool.js";
+export type { RuntimeTool, ToolAnnotations, ToolIdentity } from "./tool.js";
 export { RuntimeError } from "./errors.js";
 export type { InvokeOutcome, RuntimeErrorCode } from "./errors.js";
 export type {
@@ -10,7 +10,8 @@ export type {
   BrowserAdapterEventMeta,
   BrowserToolInvokeRequest,
   BrowserToolInvokeResult,
-  RuntimeInvokeConfirmationRequired,
+  BrowserConfirmationRequest,
+  BrowserInvocationDecision,
   RuntimeInvokeError,
   RuntimeInvokeRequest,
   RuntimeInvokeResult,
@@ -24,18 +25,21 @@ export type {
   PolicyDecision,
   PolicyRule,
   PolicyRuleMatch,
+  ToolPolicyMode,
+  ToolPolicyOverride,
 } from "./policy.js";
 export type { AuditConfig, AuditRecord } from "./audit.js";
 export type { LogHop, LogLevel, LogRecord, RuntimeLog } from "./log.js";
 export { LOG_LEVEL_RANK, isLogHop, isLogLevel, sanitizeLogData } from "./log.js";
 export { defaultConsentConfig } from "./consent.js";
 export type { ConsentConfig, ConsentOriginRecord, ConsentToolRecord } from "./consent.js";
-export {
-  DEFAULT_INVOCATION_DEADLINE_MS,
-  defaultResourceLimits,
-  TOOL_INPUT_JSON_SCHEMA_DIALECT,
+export { DEFAULT_INVOCATION_DEADLINE_MS, defaultResourceLimits } from "./config.js";
+export type {
+  ExtensionAdapterConfig,
+  McpbRelayConfig,
+  ResourceLimits,
+  RuntimeConfig,
 } from "./config.js";
-export type { ExtensionAdapterConfig, McpbRelayConfig, ResourceLimits, RuntimeConfig } from "./config.js";
 export {
   adapterTypeSchema,
   browserSourceSchema,

@@ -9,6 +9,6 @@ $env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18081"
 pnpm --filter @mcp2webmcp/webmcp-extension-demo-fixture start
 ```
 
-打开 `http://127.0.0.1:18081`。Gateway 用 `configs/extension-demo.yaml`（loopback **9334**）。加载未打包扩展：`apps/extension`。
+打开 `http://127.0.0.1:18081`。Gateway 用 `configs/extension-demo.yaml`（loopback **9334**），Extension 模式必须配置共享令牌。加载和配对步骤见 [扩展说明](../../../apps/extension/README.md)，MCP Client 接线见 [连接指南](../../../docs/connect-mcp-client.md)。
 
 yaml 若列出 `allowedOrigins`，必须与地址栏逐字一致（`localhost` ≠ `127.0.0.1`）。当前 extension-demo 默认空名单，发现到的工具进同意账本。

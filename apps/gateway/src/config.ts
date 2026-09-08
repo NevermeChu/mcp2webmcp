@@ -45,6 +45,9 @@ export function loadConfig(
   parsed.runtime.logPath = expandHome(logPath || `~/.mcp2webmcp/logs/${safeName}.jsonl`);
   parsed.audit.path = expandHome(parsed.audit.path);
   parsed.consent.path = expandHome(parsed.consent.path);
+  if (parsed.policy.overridesPath) {
+    parsed.policy.overridesPath = expandHome(parsed.policy.overridesPath);
+  }
   if (parsed.browser.mcpb?.persistPath) {
     parsed.browser.mcpb.persistPath = expandHome(parsed.browser.mcpb.persistPath);
   }

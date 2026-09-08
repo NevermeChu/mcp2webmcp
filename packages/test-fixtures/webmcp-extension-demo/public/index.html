@@ -4,16 +4,24 @@
     <meta charset="utf-8" />
     <title>WebMCP Gateway extension demo (no embed)</title>
     <style>
-      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 52rem; }
-      code { background: #f3f3f3; padding: 0.1rem 0.3rem; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        max-width: 52rem;
+      }
+      code {
+        background: #f3f3f3;
+        padding: 0.1rem 0.3rem;
+      }
     </style>
   </head>
   <body>
     <h1>extension-demo — no MCP-B embed</h1>
     <p>
-      This page only calls <code>document.modelContext.registerTool</code>.
-      It does <strong>not</strong> create a host, and does not load <code>embed.js</code> or <code>@mcp-b/global</code>.
-      Chrome without native WebMCP gets a host from the MV3 extension polyfill.
+      This page only calls <code>document.modelContext.registerTool</code>. It does
+      <strong>not</strong> create a host, and does not load <code>embed.js</code> or
+      <code>@mcp-b/global</code>. Chrome without native WebMCP gets a host from the MV3 extension
+      polyfill.
     </p>
     <p>Origin: <code id="origin"></code></p>
     <p>Status: <span id="status">registering</span></p>

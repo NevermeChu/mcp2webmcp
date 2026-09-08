@@ -24,16 +24,6 @@ describe("MCP error mapping", () => {
     expect(mapped.content[0]).toMatchObject({ text: "POLICY_DENIED: default deny" });
   });
 
-  it("maps confirmation_required to isError rather than a resume protocol", () => {
-    const mapped = mapInvokeResult({
-      status: "confirmation_required",
-      confirmationId: "c1",
-      summary: "needs approval",
-    });
-    expect(mapped.isError).toBe(true);
-    expect((mapped.content[0] as { text: string }).text).toContain("CONFIRMATION_UNAVAILABLE");
-  });
-
   it("maps INVALID_INPUT to JSON-RPC InvalidParams when used as a protocol error", () => {
     expect(mapErrorCodeToJsonRpc("INVALID_INPUT").jsonRpcCode).toBe(MCP_JSONRPC_INVALID_PARAMS);
   });

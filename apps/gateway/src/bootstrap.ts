@@ -46,6 +46,13 @@ export async function bootstrap(config: RuntimeConfig): Promise<McpStdioServer> 
       authToken: extension.authToken,
       disconnectGraceMs: extension.disconnectGraceMs,
       log: runtime.log,
+      policyControl: {
+        get: (origin, originalName) => runtime.policyOverrides.get(origin, originalName),
+        list: () => runtime.policyOverrides.list(),
+        set: (origin, originalName, mode) =>
+          runtime.policyOverrides.set(origin, originalName, mode),
+        effective: (source, tool) => runtime.policy.evaluate({ source, tool, input: {} }).action,
+      },
     });
     await runtime.attach(adapter);
     runtime.log.info("gateway", "extension.listen", {

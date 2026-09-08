@@ -68,7 +68,8 @@
     const navigatorRef = env.navigator;
     if (env.isSecureContext !== true) return false;
     if (hasRegisterTool(documentRef) || hasRegisterTool(navigatorRef)) return false;
-    const existing = (documentRef && documentRef.modelContext) || (navigatorRef && navigatorRef.modelContext);
+    const existing =
+      (documentRef && documentRef.modelContext) || (navigatorRef && navigatorRef.modelContext);
     if (existing && existing[POLYFILL_BRAND]) return false;
 
     const host = createWebMcpRuntimePolyfill();

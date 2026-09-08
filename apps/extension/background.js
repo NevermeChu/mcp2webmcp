@@ -1,7 +1,7 @@
 import { applyPageSnapshot, originFromTabUrl, sourceIdFor } from "./background-core.js";
 
 const PROTOCOL = "mcp2webmcp-extension";
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 3;
 const DEFAULT_PORT = 9334;
 
 /** @type {number} */
@@ -53,6 +53,34 @@ const pendingLogs = [];
 /** @type {InvocationRecord[]} */
 const recentInvocations = [];
 const MAX_INVOCATIONS = 50;
+/** @type {Map<string, {origin:string, originalName:string, mode:string}>} */
+const policyOverrides = new Map();
+/** @type {Map<string, Record<string, unknown>>} */
+const pendingConfirmations = new Map();
+
+function policyKey(origin, originalName) {
+  return `${origin}\u0000${originalName}`;
+}
+
+function toolsWithPolicy(state) {
+  return (Array.isArray(state.tools) ? state.tools : []).map((tool) => ({
+    ...tool,
+    policyMode: policyOverrides.get(policyKey(state.origin, tool.originalName))?.mode ?? "allow",
+  }));
+}
+
+function statusTabs() {
+  return [...tabs.entries()].map(([tabId, state]) => ({
+    tabId,
+    origin: state.origin,
+    url: state.url,
+    title: state.title,
+    toolCount: Array.isArray(state.tools) ? state.tools.length : 0,
+    tools: toolsWithPolicy(state),
+    runtimePresent: state.runtimePresent,
+    runtimeError: state.runtimeError,
+  }));
+}
 
 function notifyExtensionPages(message) {
   try {
@@ -180,6 +208,7 @@ function openSocket(authToken) {
   socket.onclose = () => {
     if (generation !== socketGeneration) return;
     helloOk = false;
+    pendingConfirmations.clear();
     updateBadge();
     notifyExtensionPages({ type: "state.updated" });
     setTimeout(() => {
@@ -216,6 +245,57 @@ function openSocket(authToken) {
       if (state && Number.isInteger(message.sourceGeneration) && message.sourceGeneration >= 0) {
         state.generation = message.sourceGeneration;
       }
+      return;
+    }
+    if (message.type === "policy.snapshot") {
+      policyOverrides.clear();
+      for (const entry of Array.isArray(message.overrides) ? message.overrides : []) {
+        if (entry?.origin && entry?.originalName && entry?.mode) {
+          policyOverrides.set(policyKey(entry.origin, entry.originalName), entry);
+        }
+      }
+      notifyExtensionPages({ type: "state.updated" });
+      return;
+    }
+    if (message.type === "policy.updated") {
+      const entry = message.override;
+      if (entry?.origin && entry?.originalName && entry?.mode) {
+        policyOverrides.set(policyKey(entry.origin, entry.originalName), entry);
+      }
+      notifyExtensionPages({ type: "state.updated" });
+      return;
+    }
+    if (message.type === "policy.error") {
+      notifyExtensionPages({ type: "policy.error", message: message.message });
+      return;
+    }
+    if (message.type === "confirmation.request") {
+      pendingConfirmations.set(message.requestId, message);
+      notifyExtensionPages({ type: "state.updated" });
+      updateBadge();
+      return;
+    }
+    if (message.type === "confirmation.resolved") {
+      pendingConfirmations.delete(message.requestId);
+      notifyExtensionPages({ type: "state.updated" });
+      updateBadge();
+      return;
+    }
+    if (message.type === "invocation.decision") {
+      pendingConfirmations.delete(message.requestId);
+      const tabId = Number(String(message.sourceId ?? "").replace(/^tab:/, ""));
+      recordInvocation({
+        id: message.requestId,
+        timestamp: message.timestamp || Date.now(),
+        tabId,
+        originalName: message.originalName,
+        durationMs: 0,
+        isError: true,
+        error: message.reason || message.errorCode || "blocked by policy",
+        decision: message.action,
+        errorCode: message.errorCode,
+      });
+      notifyExtensionPages({ type: "state.updated" });
       return;
     }
     if (message.type === "ping") {
@@ -323,16 +403,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           gateway: `ws://127.0.0.1:${gatewayPort}`,
           activeTabId: activeTab?.id,
           invocations: recentInvocations,
-          tabs: [...tabs.entries()].map(([tabId, state]) => ({
-            tabId,
-            origin: state.origin,
-            url: state.url,
-            title: state.title,
-            toolCount: Array.isArray(state.tools) ? state.tools.length : 0,
-            tools: Array.isArray(state.tools) ? state.tools : [],
-            runtimePresent: state.runtimePresent,
-            runtimeError: state.runtimeError,
-          })),
+          confirmations: [...pendingConfirmations.values()],
+          tabs: statusTabs(),
         });
       })
       .catch(() => {
@@ -340,22 +412,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           connected: Boolean(helloOk),
           gateway: `ws://127.0.0.1:${gatewayPort}`,
           invocations: recentInvocations,
-          tabs: [...tabs.entries()].map(([tabId, state]) => ({
-            tabId,
-            origin: state.origin,
-            url: state.url,
-            title: state.title,
-            toolCount: Array.isArray(state.tools) ? state.tools.length : 0,
-            tools: Array.isArray(state.tools) ? state.tools : [],
-            runtimePresent: state.runtimePresent,
-            runtimeError: state.runtimeError,
-          })),
+          confirmations: [...pendingConfirmations.values()],
+          tabs: statusTabs(),
         });
       });
     return true;
   }
   if (message?.type === "gateway.reconnect") {
     connect();
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message?.type === "policy.set") {
+    if (
+      typeof message.origin !== "string" ||
+      typeof message.originalName !== "string" ||
+      !["allow", "confirm", "deny"].includes(message.mode)
+    ) {
+      sendResponse({ ok: false, error: "invalid policy selection" });
+      return true;
+    }
+    send({
+      type: "policy.set",
+      requestId: crypto.randomUUID(),
+      origin: message.origin,
+      originalName: message.originalName,
+      mode: message.mode,
+    });
+    sendResponse({ ok: Boolean(helloOk), error: helloOk ? undefined : "gateway disconnected" });
+    return true;
+  }
+  if (message?.type === "confirmation.respond") {
+    const pending = pendingConfirmations.get(message.requestId);
+    if (!pending) {
+      sendResponse({ ok: false, error: "confirmation is no longer pending" });
+      return true;
+    }
+    send({
+      type: "confirmation.respond",
+      requestId: message.requestId,
+      approved: Boolean(message.approved),
+    });
     sendResponse({ ok: true });
     return true;
   }

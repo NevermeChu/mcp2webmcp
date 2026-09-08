@@ -7,7 +7,6 @@ Gateway 必须通过 `--config <yaml>` 或 `MCP2WEBMCP_CONFIG` 指定配置文�
 | 路径                     | 作用                                           |
 | ------------------------ | ---------------------------------------------- |
 | `runtime`                | 名称、日志级别/路径/轮转大小、绝对调用截止时间 |
-| `mcp.stdio.enabled`      | 是否启动 stdio MCP                             |
 | `browser.adapter`        | `fake`、`mcpb` 或 `extension`                  |
 | `browser.allowedOrigins` | 精确 origin；禁止 `*`                          |
 | `browser.mcpb`           | relay 地址、持久化和 payload 限制              |
@@ -18,6 +17,14 @@ Gateway 必须通过 `--config <yaml>` 或 `MCP2WEBMCP_CONFIG` 指定配置文�
 | `limits`                 | 工具数、输入/输出、schema、队列限制            |
 
 完整可运行示例位于 `configs/`。不要把真实令牌写入版本库。
+
+## 自动接纳与调用
+
+`consent.autoAdmit: true` 表示工具被发现时自动写入本地同意账本。它不会在注册时执行工具；它使没有匹配显式 policy、没有被撤销的工具，在 MCP Client 后续调用时可以直接执行。
+
+当前 `configs/extension-demo.yaml` 使用空 `allowedOrigins`、启用 consent 和自动接纳，因此默认体验是“注册后可调用”。页面 annotation 本身不会偷偷改变用户模式；需要确认或禁止时，在 Side Panel 手动选择，或使用显式 yaml 规则。
+
+`policy.overridesPath` 可指定 Gateway 保存 Side Panel 精确工具覆盖规则的位置；未配置时使用 `<consent.path>.policy-overrides.json`。Side Panel 的 allow/confirm/deny 覆盖优先于 yaml 和 consent。MCP 管理工具 revoke 与本机 CLI restore 继续管理 consent 账本，不改写用户覆盖规则。
 
 ## 环境变量
 
@@ -34,7 +41,7 @@ $env:MCP2WEBMCP_EXTENSION_TOKEN = "生成一个随机长令牌"
 node apps/gateway/dist/main.js --config configs/extension-demo.yaml
 ```
 
-随后在扩展 Side Panel 保存同一个令牌。`configs/mcp-client.extension.example.json` 展示了由 MCP 客户端注入环境变量的结构。
+随后在扩展底部“连接设置”中保存同一个令牌。`configs/mcp-client.extension.example.json` 展示了由 MCP 客户端注入环境变量的结构。
 
 ## 同意管理
 

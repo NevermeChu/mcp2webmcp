@@ -21,6 +21,20 @@ const source = {
   state: "connected" as const,
 };
 
+const runtimeTool = {
+  identity: {
+    adapterId: "fake-1",
+    sourceId: "tab-18",
+    sourceGeneration: 1,
+    originalName: "search_documents",
+    runtimeId: "rt_abc",
+    mcpName: "knowmesh__tab18__search_documents__a81f2c",
+  },
+  inputSchema: { type: "object", properties: {} },
+  discoveredAt: 1,
+  updatedAt: 1,
+};
+
 describe("protocol schemas", () => {
   it("accepts a valid BrowserSource", () => {
     expect(browserSourceSchema.parse(source).generation).toBe(1);
@@ -31,42 +45,33 @@ describe("protocol schemas", () => {
   });
 
   it("accepts a RuntimeTool envelope", () => {
-    const tool = runtimeToolSchema.parse({
-      identity: {
-        adapterId: "fake-1",
+    const tool = runtimeToolSchema.parse(runtimeTool);
+    expect(tool.identity.originalName).toBe("search_documents");
+  });
+
+  it("rejects removed speculative source and tool fields", () => {
+    expect(() => browserSourceSchema.parse({ ...source, profileId: "profile-1" })).toThrow(
+      /unrecognized/i,
+    );
+    expect(() => browserSourceSchema.parse({ ...source, adapterType: "cdp" })).toThrow();
+    expect(() =>
+      runtimeToolSchema.parse({
+        ...runtimeTool,
         sourceId: "tab-18",
         sourceGeneration: 1,
-        originalName: "search_documents",
-        runtimeId: "rt_abc",
-        mcpName: "knowmesh__tab18__search_documents__a81f2c",
-      },
-      sourceId: "tab-18",
-      sourceGeneration: 1,
-      inputSchema: { type: "object", properties: {} },
-      discoveredAt: 1,
-      updatedAt: 1,
-      status: "available",
-    });
-    expect(tool.identity.originalName).toBe("search_documents");
+        status: "available",
+      }),
+    ).toThrow(/unrecognized/i);
   });
 
   it("rejects mcp names longer than 128 characters", () => {
     expect(() =>
       runtimeToolSchema.parse({
+        ...runtimeTool,
         identity: {
-          adapterId: "fake-1",
-          sourceId: "tab-18",
-          sourceGeneration: 1,
-          originalName: "search_documents",
-          runtimeId: "rt_abc",
+          ...runtimeTool.identity,
           mcpName: "n".repeat(129),
         },
-        sourceId: "tab-18",
-        sourceGeneration: 1,
-        inputSchema: {},
-        discoveredAt: 1,
-        updatedAt: 1,
-        status: "available",
       }),
     ).toThrow();
   });
@@ -154,6 +159,18 @@ describe("protocol schemas", () => {
     expect(() =>
       runtimeConfigSchema.parse({
         runtime: { logLevell: "debug" },
+        browser: { allowedOrigins: [] },
+        policy: { default: "deny", rules: [] },
+        audit: { path: "/tmp/audit.jsonl" },
+      }),
+    ).toThrow(/unrecognized/i);
+  });
+
+  it("rejects the removed stdio enabled switch", () => {
+    expect(() =>
+      runtimeConfigSchema.parse({
+        runtime: {},
+        mcp: { stdio: { enabled: true } },
         browser: { allowedOrigins: [] },
         policy: { default: "deny", rules: [] },
         audit: { path: "/tmp/audit.jsonl" },

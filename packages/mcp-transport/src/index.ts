@@ -3,4 +3,3 @@ export type { ManagementToolName, MappedProtocolError, MappedToolResult } from "
 export { McpStdioServer } from "./stdio-server.js";
 export { installStdioLifetime } from "./stdio-lifetime.js";
 export { ToolProjector } from "./tool-projector.js";
-export { startHttpMcpServer } from "./http-server.js";

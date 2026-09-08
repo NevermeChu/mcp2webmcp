@@ -14,4 +14,4 @@ $env:MCP2WEBMCP_E2E_FIXTURE_PORT = "18080"
 pnpm --filter @mcp2webmcp/webmcp-demo-fixture start
 ```
 
-然后打开 `http://127.0.0.1:18080`。完整接线见仓库根 README 与 `docs/connect-mcp-client.md`。
+然后打开 `http://127.0.0.1:18080`。项目定位见 [根 README](../../../README.md)，完整接线见 [连接指南](../../../docs/connect-mcp-client.md#cooperative-embed)。

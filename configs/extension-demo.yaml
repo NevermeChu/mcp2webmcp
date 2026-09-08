@@ -1,19 +1,16 @@
 # WebMCP Gateway extension demo (no MCP-B embed).
 # Load the unpacked MV3 extension from apps/extension.
 # Empty allowedOrigins: every origin the extension discovers is admitted.
-# Users revoke with webmcp_revoke_consent (origin and optional tool name).
+# Registered tools are auto-admitted. Users can switch each tool to allow,
+# confirm, or deny in the Side Panel; consent revoke remains available to MCP.
 # 9334 is the extension loopback; do not use 9333 (MCP-B relay).
 # Set MCP2WEBMCP_EXTENSION_TOKEN before startup and paste the same token into
-# the extension Side Panel. Extension mode refuses to start without it.
+# the extension's bottom "Connection settings" panel. Extension mode refuses to start without it.
 
 runtime:
   name: mcp2webmcp-extension-demo
   logLevel: info
   # Always-on JSONL at ~/.mcp2webmcp/logs/mcp2webmcp-extension-demo.jsonl unless logPath / MCP2WEBMCP_LOG_PATH is set.
-
-mcp:
-  stdio:
-    enabled: true
 
 browser:
   adapter: extension
@@ -23,11 +20,11 @@ browser:
     port: 9334
 
 policy:
+  # Registration is callable by default. Side Panel choices are persisted here
+  # by the Gateway and override these base rules for the exact origin + tool.
   default: deny
-  rules:
-    - match:
-        destructive: true
-      action: confirm
+  rules: []
+  overridesPath: "~/.mcp2webmcp/extension-demo-policy-overrides.json"
 
 consent:
   enabled: true

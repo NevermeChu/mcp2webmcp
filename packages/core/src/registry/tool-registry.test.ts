@@ -10,12 +10,9 @@ describe("ToolRegistry", () => {
     const identity = names.resolve(source, originalName);
     return {
       identity,
-      sourceId: source.sourceId,
-      sourceGeneration: source.generation,
       inputSchema: { type: "object", properties: {} },
       discoveredAt: 1,
       updatedAt: 1,
-      status: "available" as const,
     };
   }
 
@@ -50,7 +47,7 @@ describe("ToolRegistry", () => {
     registry.register(first);
     registry.register(second);
     expect(registry.list()).toHaveLength(1);
-    expect(registry.getByMcpName(first.identity.mcpName)?.sourceGeneration).toBe(2);
+    expect(registry.getByMcpName(first.identity.mcpName)?.identity.sourceGeneration).toBe(2);
   });
 
   it("looks up by MCP name", () => {

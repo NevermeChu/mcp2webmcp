@@ -157,8 +157,8 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
     expect(probe?.toolCount).toBe(0);
     expect(probe?.polyfillBrand).toBe(true);
 
-    const line = await waitFor("popup 0 tools", async () => {
-      const text = await popupLineForOrigin(context, originA);
+    const line = await waitFor("side panel 0 tools", async () => {
+      const text = await sidePanelLineForOrigin(context, originA);
       if (text && !/0\s*(tools|个工具)/.test(text)) {
         throw new Error(`row for ${originA} renders as ${JSON.stringify(text)}`);
       }
@@ -253,6 +253,45 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
     });
   }, 90_000);
 
+  it("lets the Side Panel allow, confirm, and block an exact tool", async () => {
+    const page = await openReadyPage(context, originA);
+    const panel = await context.newPage();
+    try {
+      const echo = await waitForOriginal(gateway.client, "echo", originA);
+      await panel.goto(`chrome-extension://${extensionId(context)}/sidepanel.html`);
+      await setPanelPolicy(panel, "echo", "confirm");
+      await waitFor("confirm policy persisted", async () => {
+        await panel.reload();
+        const refreshed = panel.locator(".tool-item", { hasText: "echo" }).first();
+        return (await refreshed.locator(".policy-select").inputValue()) === "confirm";
+      });
+
+      const pendingCall = gateway.client.callTool({
+        name: echo.mcpName,
+        arguments: { message: "confirmed" },
+      });
+      const confirmation = panel.locator(".confirmation-card", { hasText: "echo" }).first();
+      await confirmation.waitFor({ state: "visible" });
+      await confirmation.locator(".confirm-allow").click();
+      const confirmed = await pendingCall;
+      expect(confirmed.isError).not.toBe(true);
+      expect(textContent(confirmed)).toContain("echo:confirmed");
+
+      await setPanelPolicy(panel, "echo", "deny");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const denied = await gateway.client.callTool({
+        name: echo.mcpName,
+        arguments: { message: "blocked" },
+      });
+      expect(denied.isError).toBe(true);
+      expect(textContent(denied)).toContain("POLICY_DENIED");
+      await setPanelPolicy(panel, "echo", "allow");
+    } finally {
+      await panel.close();
+      await page.close();
+    }
+  }, 90_000);
+
   it("drops the tool from Gateway when the page aborts registerTool", async () => {
     const page = await openReadyPage(context, originA);
     await waitForOriginal(gateway.client, "echo", originA);
@@ -273,35 +312,34 @@ function extensionId(context: BrowserContext): string {
   return new URL(worker.url()).host;
 }
 
-async function popupLineForOrigin(
+async function sidePanelLineForOrigin(
   context: BrowserContext,
   origin: string,
 ): Promise<string | undefined> {
-  const popup = await context.newPage();
+  const panel = await context.newPage();
   try {
-    await popup.goto(`chrome-extension://${extensionId(context)}/popup.html`);
-    // The popup embeds the panel UI: the active-tab card plus the other-tabs list.
-    await popup
+    await panel.goto(`chrome-extension://${extensionId(context)}/sidepanel.html`);
+    await panel
       .waitForSelector("#active-tab-origin, .tab-item-origin", { timeout: 2000 })
       .catch(() => undefined);
     const candidates: string[] = [];
-    const activeOrigin = await popup
+    const activeOrigin = await panel
       .locator("#active-tab-origin")
       .textContent()
       .catch(() => "");
-    const activeCount = await popup
+    const activeCount = await panel
       .locator("#active-tools-count")
       .textContent()
       .catch(() => "");
     if (activeOrigin) candidates.push(`${activeOrigin} ${activeCount ?? ""} tools`);
-    candidates.push(...(await popup.locator(".tab-item-origin").allTextContents()));
+    candidates.push(...(await panel.locator(".tab-item-origin").allTextContents()));
     if (candidates.length > 0 && !candidates.some((line) => line.includes(origin))) {
-      // Surface what the popup actually rendered so failures are diagnosable.
-      throw new Error(`no row for ${origin}; popup=${JSON.stringify(candidates)}`);
+      // Surface what the side panel actually rendered so failures are diagnosable.
+      throw new Error(`no row for ${origin}; sidePanel=${JSON.stringify(candidates)}`);
     }
     return candidates.find((line) => line.includes(origin));
   } finally {
-    await popup.close();
+    await panel.close();
   }
 }
 
@@ -321,6 +359,22 @@ async function startPickerOnTab(worker: Worker, targetUrl: string): Promise<void
     if (!found?.id) throw new Error("picker tab not found");
     await ext.tabs.sendMessage(found.id, { type: "pick.start" });
   }, targetUrl);
+}
+
+async function setPanelPolicy(
+  panel: Page,
+  toolName: string,
+  mode: "allow" | "confirm" | "deny",
+): Promise<void> {
+  const select = panel
+    .locator(".tool-item", { hasText: toolName })
+    .first()
+    .locator(".policy-select");
+  await select.evaluate((element, value) => {
+    const control = element as HTMLSelectElement;
+    control.value = value;
+    control.dispatchEvent(new Event("change", { bubbles: true }));
+  }, mode);
 }
 
 async function openReadyPage(context: BrowserContext, url: string): Promise<Page> {

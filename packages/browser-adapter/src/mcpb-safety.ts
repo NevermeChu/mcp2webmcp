@@ -32,6 +32,9 @@ export function normalizeLoopbackHost(host: string): string {
 
 export function isLoopbackAddress(address: string | undefined): boolean {
   if (!address) return false;
-  const normalized = address.trim().toLowerCase().replace(/^::ffff:/, "");
+  const normalized = address
+    .trim()
+    .toLowerCase()
+    .replace(/^::ffff:/, "");
   return LOOPBACK_HOSTS.has(normalized);
 }

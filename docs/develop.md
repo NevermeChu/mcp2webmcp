@@ -1,34 +1,47 @@
-# 开发
+# 开发指南
+
+本文只描述贡献者工作流。系统设计见 [当前架构](current/architecture.md)，配置与环境变量见 [当前配置](current/configuration.md)，运行日志和故障定位见 [运维与测试](current/operations-and-testing.md)。
+
+## 本地准备
+
+需要 Node.js 22+ 与 pnpm 11：
 
 ```powershell
-pnpm test                 # 单测 + 集成（不含浏览器）
-pnpm test:e2e             # cooperative embed；Windows 优先 Edge
-pnpm test:e2e:extension   # 未打包扩展 + 无 embed 夹具
+pnpm install
+pnpm build
+```
+
+`pnpm test` 中有测试会启动 `packages/mcp-transport/dist/fake-stdio-main.js`，首次运行或修改 TypeScript 后应先构建。
+
+## 验证命令
+
+```powershell
+pnpm build
 pnpm lint
-```
-
-`pnpm test` 会 spawn `packages/mcp-transport/dist/fake-stdio-main.js`，请先 `pnpm build`。没有 Edge 时：
-
-```powershell
-pnpm exec playwright install chromium
+pnpm test
 pnpm test:e2e
+pnpm test:e2e:extension
+pnpm docs:check
+pnpm format:check
 ```
 
-不经过浏览器、只测 stdio：
+- `pnpm test:e2e` 验证真实浏览器 cooperative MCP-B 链路。
+- `pnpm test:e2e:extension` 验证加载未打包 MV3 扩展的无 embed 链路。
+- 没有可用的 Edge/Chromium 时，先运行 `pnpm exec playwright install chromium`。
 
-```powershell
-$env:MCP2WEBMCP_FAKE_ECHO = "1"
-node apps/gateway/dist/main.js --config configs/example.yaml
-```
+## 按改动选择验证
 
-环境变量：`MCP2WEBMCP_CONFIG`、`MCP2WEBMCP_ALLOWED_ORIGINS`、`MCP2WEBMCP_EXTENSION_TOKEN`（扩展 hello 共享令牌）、`MCP2WEBMCP_LOG_LEVEL`（过滤 stderr）、`MCP2WEBMCP_LOG_PATH`（覆盖 JSONL 路径）。改 `packages/protocol` 或 yaml schema 后必须 `pnpm build`，Cursor 读的是 `apps/gateway/dist`。`mcp2webmcp-extension-demo` 由 Cursor 按 `.cursor/mcp.json` spawn，不要另外再开一份同样的 `node ... extension-demo.yaml`。Reload MCP 会关 stdio；Gateway 必须随之退出并放开 `9334`，否则下一次会 `EADDRINUSE`。
+| 改动范围                             | 至少验证                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `packages/protocol`、配置 schema     | `pnpm build`、`pnpm test`，并核对 `configs/` 和配置文档                           |
+| Core、策略、路由、审计               | `pnpm build`、`pnpm test`；涉及浏览器生命周期时补对应 E2E                         |
+| MCP transport 或 Gateway CLI         | `pnpm build`、`pnpm test`、`pnpm test:e2e`、`pnpm test:e2e:extension`             |
+| `apps/extension` 或 Extension 协议   | `pnpm lint`、`pnpm test`、`pnpm test:e2e:extension`；协议字段变化同步更新协议文档 |
+| MCP-B adapter 或 cooperative fixture | `pnpm test`、`pnpm test:e2e`                                                      |
+| 仅文档                               | `pnpm docs:check`、`pnpm format:check`，并人工核对命令与当前脚本                  |
 
-进程启动后会自动写 JSONL（默认 `~/.mcp2webmcp/logs/<runtime.name>.jsonl`），覆盖页面 → 扩展 → Gateway → MCP 投影。不写 stdout。Cursor 把 MCP 标红时仍可读该文件。MCP 还活着时可用 `webmcp_recent_logs`。`logLevel` 只影响 stderr；文件始终记录 info/warn/error。调用参数和 Cookie 不会进日志。
+## 本地文件边界
 
-| 文件                              | 用途                                                           |
-| --------------------------------- | -------------------------------------------------------------- |
-| `configs/demo.yaml`               | embed demo（`:18080` / `9333`）                                |
-| `configs/extension-demo.yaml`     | 扩展 demo（`:18081` / `9334`）；空 `allowedOrigins` + 同意账本 |
-| `configs/example.yaml`            | 业务站骨架（mcpb 仍要 origin）                                 |
-| `~/.mcp2webmcp/*-consent.json`    | 发现后自动放行的 origin/工具；撤销不入库                       |
-| `~/.mcp2webmcp/logs/<name>.jsonl` | 端到端运行日志（哪一跳失败看 `hop` + `event`）                 |
+- `.cursor/mcp.json`、`.env*`、日志、Playwright 产物和 `docs/local/` 不应提交。
+- 不在 stdout 输出诊断信息，避免破坏 stdio MCP；运行日志写入 JSONL，详见 [运维与测试](current/operations-and-testing.md)。
+- 修改 `packages/protocol`、Gateway TypeScript 或配置 schema 后重新构建；MCP Client 运行的是 `apps/gateway/dist`。

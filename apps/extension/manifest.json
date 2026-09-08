@@ -26,7 +26,7 @@
     "type": "module"
   },
   "permissions": ["tabs", "sidePanel", "storage"],
-  "host_permissions": ["http://127.0.0.1/*", "http://*/*", "https://*/*"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],

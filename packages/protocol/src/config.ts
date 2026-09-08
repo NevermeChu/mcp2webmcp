@@ -2,8 +2,6 @@ import type { AuditConfig } from "./audit.js";
 import type { ConsentConfig } from "./consent.js";
 import type { PolicyConfig } from "./policy.js";
 
-export const TOOL_INPUT_JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema";
-
 export const DEFAULT_INVOCATION_DEADLINE_MS = 65_000;
 
 export interface ResourceLimits {
@@ -23,9 +21,6 @@ export interface RuntimeConfig {
     logPath?: string;
     logMaxBytes?: number;
     invocationDeadlineMs: number;
-  };
-  mcp: {
-    stdio: { enabled: boolean };
   };
   browser: {
     adapter: string;

@@ -4,7 +4,10 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const polyfillPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "webmcp-runtime-polyfill.js");
+const polyfillPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "webmcp-runtime-polyfill.js",
+);
 const POLYFILL_BRAND = Symbol.for("mcp2webmcp.webmcp-runtime-polyfill");
 const source = fs.readFileSync(polyfillPath, "utf8");
 
@@ -67,7 +70,12 @@ describe("webmcp-runtime-polyfill", () => {
       { name: "temp", description: "Temp", execute: async () => "x" },
       { signal: controller.signal },
     );
-    expect(host.getTools().map((tool) => tool.name).sort()).toEqual(["echo", "temp"]);
+    expect(
+      host
+        .getTools()
+        .map((tool) => tool.name)
+        .sort(),
+    ).toEqual(["echo", "temp"]);
     controller.abort();
     expect(host.getTools().map((tool) => tool.name)).toEqual(["echo"]);
   });

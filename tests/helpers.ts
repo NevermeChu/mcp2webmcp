@@ -33,7 +33,6 @@ export function testConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfi
       logLevel: "info",
       invocationDeadlineMs: 65_000,
     },
-    mcp: { stdio: { enabled: true } },
     browser: {
       adapter: "fake",
       allowedOrigins: ["https://knowmesh.app"],
@@ -65,7 +64,6 @@ export function testConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeConfi
     ...base,
     ...overrides,
     runtime: { ...base.runtime, ...overrides.runtime },
-    mcp: { ...base.mcp, ...overrides.mcp },
     browser: {
       ...base.browser,
       ...overrides.browser,

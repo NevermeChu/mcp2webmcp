@@ -64,7 +64,7 @@ class FakeExtension {
     this.send({
       type: "hello",
       protocol: "mcp2webmcp-extension",
-      protocolVersion: 2,
+      protocolVersion: 3,
       token: TEST_TOKEN,
     });
   }
@@ -124,9 +124,6 @@ async function boot(): Promise<Handles> {
       "  logLevel: info",
       `  logPath: ${join(dir, "log.jsonl").replaceAll("\\", "/")}`,
       "  invocationDeadlineMs: 65000",
-      "mcp:",
-      "  stdio:",
-      "    enabled: true",
       "browser:",
       "  adapter: extension",
       "  allowedOrigins:",

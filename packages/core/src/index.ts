@@ -6,7 +6,11 @@ export { NamespaceResolver } from "./routing/namespace-resolver.js";
 export { ToolRouter } from "./routing/tool-router.js";
 export { LifecycleManager } from "./lifecycle/lifecycle-manager.js";
 export { PolicyEngine } from "./policy/policy-engine.js";
-export { ConfirmationManager } from "./policy/confirmation-manager.js";
+export {
+  FilePolicyOverrideStore,
+  MemoryPolicyOverrideStore,
+} from "./policy/policy-override-store.js";
+export type { PolicyOverrideStore } from "./policy/policy-override-store.js";
 export {
   DisabledConsentStore,
   FileConsentStore,

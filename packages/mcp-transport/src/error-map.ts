@@ -27,17 +27,6 @@ export function mapInvokeResult(result: RuntimeInvokeResult): MappedToolResult {
       structuredContent: result.structuredContent,
     };
   }
-  if (result.status === "confirmation_required") {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `CONFIRMATION_UNAVAILABLE: ${result.summary}`,
-        },
-      ],
-      isError: true,
-    };
-  }
   return {
     content: [
       {

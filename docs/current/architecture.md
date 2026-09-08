@@ -33,7 +33,7 @@ WebMCP Gateway 把浏览器页面注册的 WebMCP 工具投影为 stdio MCP 工�
 ## 生命周期与身份
 
 - source 身份由 `adapterId + sourceId` 确定；导航/重载提升 `generation`。
-- tool 调用绑定 `adapterId + sourceId + sourceGeneration + originalName`。Extension 协议 v2 用 `sourceAck` 把 Gateway 的权威 generation 同步回扩展，并在 invoke、cancel、result 三类消息中携带 generation，同时校验页面实例。
+- tool 调用绑定 `adapterId + sourceId + sourceGeneration + originalName`。Extension 协议 v3 用 `sourceAck` 把 Gateway 的权威 generation 同步回扩展，并在 invoke、cancel、result 与确认消息中携带或复核 generation，同时校验页面实例。
 - `mcpName` 是稳定、带命名空间的 MCP 名称；策略匹配使用页面 `originalName`。
 - attach 先订阅事件，再获取稳定快照；快照期间出现事件会重试，避免用旧快照覆盖新事件。
 - source generation 变化时，旧 generation 的工具和延迟结果不能进入当前状态。
@@ -43,3 +43,7 @@ WebMCP Gateway 把浏览器页面注册的 WebMCP 工具投影为 stdio MCP 工�
 管理工具为：`webmcp_list_sources`、`webmcp_list_tools`、`webmcp_get_tool`、`webmcp_runtime_status`、`webmcp_call_tool`、`webmcp_list_consent`、`webmcp_revoke_consent`、`webmcp_recent_logs`。可调用页面工具还会动态投影为独立 MCP 工具。
 
 恢复同意不是 MCP 工具，必须由本机 CLI 执行；这保证调用端不能自行撤销管理员的 revoke。
+
+## 策略控制边界
+
+Side Panel 是 Extension 模式的本机策略操作界面，可为精确 `origin + originalName` 选择 allow、confirm 或 deny，并显示等待确认与 Gateway 拦截原因。扩展只提交选择和一次性确认响应；Gateway Core 仍负责持久化、规则优先级、校验、结构化日志、审计和最终执行。见 [ADR 0011](../adr/0011-extension-policy-control.md)。

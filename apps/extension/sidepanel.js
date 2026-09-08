@@ -22,19 +22,11 @@ const I18N = {
     runtime_inactive: "未激活",
     runtime_active: "Runtime 就绪",
     runtime_none: "无 Runtime",
-    page_tools_title: "页面已暴露工具",
-    empty_tools:
-      "当前页面暂无注册工具。<br>点击上方 <strong>拾取页面元素生成工具</strong>，可将网页按钮或表单转化为 AI 工具。",
     empty_tools_short: "当前页面暂无注册工具。",
     tool_available: "可用",
     tool_confirm: "需确认",
-    tag_destructive: "破坏性",
-    tag_readonly: "只读",
-    tag_idempotent: "幂等",
     schema_summary: "入参 Schema (JSON)",
     no_desc: "未提供描述",
-    live_invocations: "实时调用记录",
-    calls_suffix: "次调用",
     waiting_invocations: "等待 AI Agent 调用页面工具…",
     error_prefix: "调用失败: ",
     other_tabs: "其他 WebMCP 标签页",
@@ -49,6 +41,14 @@ const I18N = {
     clear: "清除",
     local_only: "仅连接本机",
     connection_settings: "连接设置",
+    policy_deny: "禁止",
+    policy_label: "调用策略",
+    policy_allow_option: "允许",
+    policy_confirm_option: "每次确认",
+    policy_deny_option: "禁止",
+    confirmation_heading: "等待确认",
+    confirmation_allow: "仅本次允许",
+    confirmation_deny: "拒绝",
     lang_btn: "EN",
   },
   en: {
@@ -74,19 +74,19 @@ const I18N = {
     runtime_inactive: "Inactive",
     runtime_active: "Runtime Active",
     runtime_none: "No Runtime",
-    page_tools_title: "Page Tools",
-    empty_tools:
-      "No tools registered on this page yet.<br>Click <strong>Pick Element to Tool</strong> above to expose buttons or forms to AI.",
     empty_tools_short: "No tools registered on this page.",
     tool_available: "Available",
     tool_confirm: "Confirm",
-    tag_destructive: "Destructive",
-    tag_readonly: "ReadOnly",
-    tag_idempotent: "Idempotent",
+    policy_deny: "Blocked",
+    policy_label: "Invocation policy",
+    policy_allow_option: "Allow",
+    policy_confirm_option: "Confirm each time",
+    policy_deny_option: "Block",
+    confirmation_heading: "Confirmation required",
+    confirmation_allow: "Allow once",
+    confirmation_deny: "Deny",
     schema_summary: "Input Schema (JSON)",
     no_desc: "No description provided",
-    live_invocations: "Live Invocations",
-    calls_suffix: "calls",
     waiting_invocations: "Waiting for AI agent tool invocations…",
     error_prefix: "Error: ",
     other_tabs: "Other WebMCP Tabs",
@@ -216,10 +216,15 @@ function renderActiveTab(activeTab) {
       const rawName = tool.originalName || "unnamed";
       const name = escapeHtml(rawName);
       const desc = escapeHtml(tool.description || t("no_desc"));
-      const isDestructive = Boolean(tool.annotations?.destructiveHint);
-      const badge = isDestructive
-        ? `<span class="tag tag-destructive">${t("tool_confirm")}</span>`
-        : `<span class="tag tag-readonly">${t("tool_available")}</span>`;
+      const mode = ["allow", "confirm", "deny"].includes(tool.policyMode)
+        ? tool.policyMode
+        : "allow";
+      const badge =
+        mode === "confirm"
+          ? `<span class="tag tag-destructive">${t("tool_confirm")}</span>`
+          : mode === "deny"
+            ? `<span class="tag tag-destructive">${t("policy_deny")}</span>`
+            : `<span class="tag tag-readonly">${t("tool_available")}</span>`;
 
       let schemaHtml = "";
       if (tool.inputSchema && typeof tool.inputSchema === "object") {
@@ -238,7 +243,17 @@ function renderActiveTab(activeTab) {
             </span>
             <span class="tool-badges">${badge}<span class="tool-chevron">⌄</span></span>
           </button>
-          <div class="tool-details">${schemaHtml}</div>
+          <div class="tool-details">
+            <div class="policy-row">
+              <label class="policy-label">${t("policy_label")}</label>
+              <select class="policy-select" data-origin="${escapeHtml(activeTab.origin || "")}" data-tool="${name}">
+                <option value="allow" ${mode === "allow" ? "selected" : ""}>${t("policy_allow_option")}</option>
+                <option value="confirm" ${mode === "confirm" ? "selected" : ""}>${t("policy_confirm_option")}</option>
+                <option value="deny" ${mode === "deny" ? "selected" : ""}>${t("policy_deny_option")}</option>
+              </select>
+            </div>
+            ${schemaHtml}
+          </div>
         </article>`;
     })
     .join("");
@@ -248,6 +263,70 @@ function renderActiveTab(activeTab) {
       const item = summary.closest(".tool-item");
       const isOpen = item?.classList.toggle("open") || false;
       summary.setAttribute("aria-expanded", String(isOpen));
+    });
+  });
+  toolsContainer.querySelectorAll(".policy-select").forEach((select) => {
+    select.addEventListener("change", () => {
+      select.disabled = true;
+      chrome.runtime.sendMessage(
+        {
+          type: "policy.set",
+          origin: select.getAttribute("data-origin"),
+          originalName: select.getAttribute("data-tool"),
+          mode: select.value,
+        },
+        (result) => {
+          select.disabled = false;
+          if (chrome.runtime.lastError || !result?.ok) {
+            const errorEl = document.getElementById("pick-error");
+            if (errorEl) {
+              errorEl.hidden = false;
+              errorEl.textContent =
+                result?.error || chrome.runtime.lastError?.message || "Policy update failed";
+            }
+            fetchStatus();
+          }
+        },
+      );
+    });
+  });
+}
+
+function renderConfirmations(confirmations) {
+  const panel = document.getElementById("confirmations-panel");
+  const container = document.getElementById("confirmations-container");
+  const list = Array.isArray(confirmations) ? confirmations : [];
+  panel.hidden = list.length === 0;
+  if (list.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = list
+    .map(
+      (item) => `<div class="confirmation-card">
+        <div class="confirmation-tool">${escapeHtml(item.originalName || "tool")}</div>
+        <div class="confirmation-meta">${escapeHtml(item.origin || "")}${item.clientName ? ` · ${escapeHtml(item.clientName)}` : ""}</div>
+        <div class="confirmation-actions">
+          <button type="button" class="confirm-allow" data-request-id="${escapeHtml(item.requestId)}">${t("confirmation_allow")}</button>
+          <button type="button" class="confirm-deny" data-request-id="${escapeHtml(item.requestId)}">${t("confirmation_deny")}</button>
+        </div>
+      </div>`,
+    )
+    .join("");
+  container.querySelectorAll(".confirmation-actions button").forEach((button) => {
+    button.addEventListener("click", () => {
+      button
+        .closest(".confirmation-actions")
+        ?.querySelectorAll("button")
+        .forEach((item) => (item.disabled = true));
+      chrome.runtime.sendMessage(
+        {
+          type: "confirmation.respond",
+          requestId: button.getAttribute("data-request-id"),
+          approved: button.classList.contains("confirm-allow"),
+        },
+        () => fetchStatus(),
+      );
     });
   });
 }
@@ -274,11 +353,12 @@ function renderInvocations(invocations) {
       const isErr = Boolean(inv.isError);
       const name = escapeHtml(inv.originalName || "tool");
       const errorMsg = inv.error ? escapeHtml(inv.error) : "";
+      const errorCode = inv.errorCode ? escapeHtml(inv.errorCode) : "";
       const resultPreview = inv.resultPreview ? escapeHtml(inv.resultPreview) : "";
 
       let bodyText = "";
       if (isErr) {
-        bodyText = `${t("error_prefix")}${errorMsg || "failed"}`;
+        bodyText = `${t("error_prefix")}${errorCode ? `[${errorCode}] ` : ""}${errorMsg || "failed"}`;
       } else if (resultPreview) {
         bodyText = `Result: ${resultPreview}`;
       } else if (inv.args && typeof inv.args === "object") {
@@ -345,6 +425,7 @@ function renderAll(status) {
     renderGatewayStatus(null);
     renderActiveTab(null);
     renderInvocations([]);
+    renderConfirmations([]);
     renderOtherTabs([], null);
     return;
   }
@@ -361,6 +442,7 @@ function renderAll(status) {
 
   renderActiveTab(activeTab);
   renderInvocations(status.invocations);
+  renderConfirmations(status.confirmations);
   renderOtherTabs(tabsList, activeTab ? activeTab.tabId : activeId);
 }
 
@@ -396,6 +478,12 @@ setInterval(fetchStatus, 2000);
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "state.updated" || message?.type === "invocation.stream") {
     fetchStatus();
+  } else if (message?.type === "policy.error") {
+    const errorEl = document.getElementById("pick-error");
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.textContent = message.message || "Policy update failed";
+    }
   }
 });
 

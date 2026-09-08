@@ -4,7 +4,7 @@ import type {
   McpbRelaySnapshot,
   McpbRelaySnapshotSource,
   McpbRelaySnapshotTool,
-} from "./mcpb-bridge.js";
+} from "../src/mcpb-bridge.js";
 
 /** In-memory stand-in for RelayBridgeServer public methods. */
 export class FakeRelayBridge extends EventEmitter implements McpbRelayBridge {

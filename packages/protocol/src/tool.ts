@@ -14,16 +14,11 @@ export interface ToolAnnotations {
   openWorldHint?: boolean;
 }
 
-export type ToolStatus = "available" | "stale" | "unavailable";
-
 export interface RuntimeTool {
   identity: ToolIdentity;
-  sourceId: string;
-  sourceGeneration: number;
   description?: string;
   inputSchema: Record<string, unknown>;
   annotations?: ToolAnnotations;
   discoveredAt: number;
   updatedAt: number;
-  status: ToolStatus;
 }

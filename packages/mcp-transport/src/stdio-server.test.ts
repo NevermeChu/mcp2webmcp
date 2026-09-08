@@ -69,7 +69,12 @@ describe("MCP stdio server with FakeBrowserAdapter", () => {
     const adapter = new FakeBrowserAdapter("fake-1");
     await runtime.attach(adapter);
     adapter.connectSource(
-      testSource({ adapterId: "fake-1", sourceId: "tab-99", tabId: "99", origin: "https://evil.example" }),
+      testSource({
+        adapterId: "fake-1",
+        sourceId: "tab-99",
+        tabId: "99",
+        origin: "https://evil.example",
+      }),
     );
     adapter.registerTool("tab-99", discoveredTool("echo"));
     const mcp = new McpStdioServer(runtime, config);
