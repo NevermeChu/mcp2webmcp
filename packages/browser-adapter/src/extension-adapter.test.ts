@@ -6,13 +6,19 @@ import {
   EXTENSION_PROTOCOL_VERSION,
   parseExtensionClientMessage,
 } from "./extension-protocol.js";
-import type { ExtensionClientMessage, ExtensionServerMessage } from "./extension-protocol.js";
+import type { ExtensionServerMessage } from "./extension-protocol.js";
+
+const TEST_TOKEN = "test-extension-token";
 
 class FakeExtensionClient {
   readonly received: ExtensionServerMessage[] = [];
+  closeCode = 0;
   private readonly waiters: Array<(message: ExtensionServerMessage) => void> = [];
 
   private constructor(private readonly socket: WebSocket) {
+    socket.on("close", (code) => {
+      this.closeCode = code;
+    });
     socket.on("message", (data) => {
       const text = typeof data === "string" ? data : data.toString();
       let parsed: unknown;
@@ -32,8 +38,16 @@ class FakeExtensionClient {
     });
   }
 
-  static async connect(port: number): Promise<FakeExtensionClient> {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  static async connect(
+    port: number,
+    options: { origin?: string | null } = {},
+  ): Promise<FakeExtensionClient> {
+    const headers: Record<string, string> = {
+      origin:
+        options.origin === null ? "" : (options.origin ?? "chrome-extension://test-extension"),
+    };
+    if (options.origin === null) delete headers.origin;
+    const socket = new WebSocket(`ws://127.0.0.1:${port}`, { headers });
     await new Promise<void>((resolve, reject) => {
       socket.once("open", () => resolve());
       socket.once("error", reject);
@@ -41,18 +55,26 @@ class FakeExtensionClient {
     return new FakeExtensionClient(socket);
   }
 
-  send(message: ExtensionClientMessage): void {
+  send(message: unknown): void {
     this.socket.send(JSON.stringify(message));
   }
 
-  async hello(): Promise<ExtensionServerMessage> {
+  async hello(token = TEST_TOKEN): Promise<ExtensionServerMessage> {
     const ack = this.waitFor((message) => message.type === "helloAck");
     this.send({
       type: "hello",
       protocol: EXTENSION_PROTOCOL,
       protocolVersion: EXTENSION_PROTOCOL_VERSION,
+      token,
     });
     return ack;
+  }
+
+  async closed(): Promise<number> {
+    if (this.socket.readyState === WebSocket.CLOSED) return this.closeCode;
+    return new Promise((resolve) => {
+      this.socket.once("close", (code) => resolve(code));
+    });
   }
 
   async waitFor(
@@ -96,6 +118,7 @@ describe("ExtensionAdapter", () => {
       adapterId: "ext-1",
       allowedOrigins,
       port: 0,
+      authToken: TEST_TOKEN,
     });
     adapters.push(adapter);
     await adapter.start();
@@ -165,6 +188,7 @@ describe("ExtensionAdapter", () => {
       type: "invokeResult",
       requestId: invoke.requestId,
       sourceId: "tab:18",
+      sourceGeneration: invoke.sourceGeneration,
       content: [{ type: "text", text: "echo:hello" }],
     });
     const result = await invokePromise;
@@ -236,6 +260,24 @@ describe("ExtensionAdapter", () => {
     expect(events).toContain("source.disconnected");
   });
 
+  it("does not reuse a source generation after removal", async () => {
+    const { adapter, client } = await boot();
+    const source = {
+      type: "source.upsert" as const,
+      sourceId: "tab:30",
+      tabId: "30",
+      origin: "http://127.0.0.1:18081",
+      url: "http://127.0.0.1:18081/",
+      reason: "connect" as const,
+    };
+    client.send(source);
+    await waitFor(async () => (await adapter.listSources())[0]?.generation === 1);
+    client.send({ type: "source.remove", sourceId: source.sourceId });
+    await waitFor(async () => (await adapter.listSources()).length === 0);
+    client.send(source);
+    await waitFor(async () => (await adapter.listSources())[0]?.generation === 2);
+  });
+
   it("bumps generation on reload of the same url", async () => {
     const { adapter, client } = await boot();
     client.send({
@@ -256,6 +298,9 @@ describe("ExtensionAdapter", () => {
       reason: "reload",
     });
     await waitFor(async () => (await adapter.listSources())[0]?.generation === 2);
+    await client.waitFor(
+      (message) => message.type === "sourceAck" && message.sourceGeneration === 2,
+    );
   });
 
   it("does not emit tool.updated when tools.replace is identical", async () => {
@@ -301,8 +346,30 @@ describe("ExtensionAdapter", () => {
       originalName: "echo",
       description: undefined,
       inputSchema: { type: "object" },
-      annotations: { readOnlyHint: true },
+      annotations: undefined,
     });
+  });
+
+  it("rejects stale-protocol results and oversized tool snapshots", () => {
+    expect(
+      parseExtensionClientMessage(
+        JSON.stringify({
+          type: "invokeResult",
+          requestId: "r1",
+          sourceId: "tab:1",
+          content: [],
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      parseExtensionClientMessage(
+        JSON.stringify({
+          type: "tools.replace",
+          sourceId: "tab:1",
+          tools: Array.from({ length: 501 }, () => ({ originalName: "echo", inputSchema: {} })),
+        }),
+      ),
+    ).toBeUndefined();
   });
 
   it("strips secret-like fields from client log frames", () => {
@@ -326,6 +393,7 @@ describe("ExtensionAdapter", () => {
       adapterId: "ext-1",
       allowedOrigins: [],
       port: 0,
+      authToken: TEST_TOKEN,
       log: {
         path: "",
         write(record) {
@@ -352,19 +420,139 @@ describe("ExtensionAdapter", () => {
   });
 
   it("refuses to construct with wildcard origins or a non-loopback host", () => {
-    expect(() => new ExtensionAdapter({ allowedOrigins: ["*"] })).toThrow(/\*/);
-    expect(() => new ExtensionAdapter({ allowedOrigins: [] })).not.toThrow();
+    expect(() => new ExtensionAdapter({ allowedOrigins: ["*"], authToken: TEST_TOKEN })).toThrow(
+      /\*/,
+    );
+    expect(() => new ExtensionAdapter({ allowedOrigins: [], authToken: TEST_TOKEN })).not.toThrow();
+    expect(() => new ExtensionAdapter({ allowedOrigins: [], authToken: "" })).toThrow(/authToken/);
     expect(
       () =>
         new ExtensionAdapter({
           allowedOrigins: ["http://127.0.0.1:18081"],
           host: "0.0.0.0",
+          authToken: TEST_TOKEN,
         }),
     ).toThrow(/loopback/);
   });
+
+  it("rejects connections without a chrome-extension origin", async () => {
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: [],
+      port: 0,
+      authToken: TEST_TOKEN,
+    });
+    adapters.push(adapter);
+    await adapter.start();
+    const client = await FakeExtensionClient.connect(adapter.listenPort, { origin: null });
+    clients.push(client);
+    expect(await client.closed()).toBe(4003);
+  });
+
+  it("requires the configured hello token and accepts the matching one", async () => {
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: [],
+      port: 0,
+      authToken: "s3cret",
+    });
+    adapters.push(adapter);
+    await adapter.start();
+    const bad = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(bad);
+    bad.send({
+      type: "hello",
+      protocol: EXTENSION_PROTOCOL,
+      protocolVersion: EXTENSION_PROTOCOL_VERSION,
+      token: "wrong-token",
+    });
+    expect(await bad.closed()).toBe(4001);
+
+    const good = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(good);
+    await good.hello("s3cret");
+    await good.waitFor((message) => message.type === "helloAck");
+  });
+
+  it("replaces an established session only after a successful hello", async () => {
+    const { adapter, client } = await boot();
+    const second = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(second);
+    await second.hello();
+    await second.waitFor((message) => message.type === "helloAck");
+    expect(await client.closed()).toBe(4000);
+    expect(await adapter.listSources()).toHaveLength(0);
+  });
+
+  it("keeps sources during the disconnect grace period", async () => {
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: [],
+      port: 0,
+      disconnectGraceMs: 300,
+      authToken: TEST_TOKEN,
+    });
+    adapters.push(adapter);
+    await adapter.start();
+    const client = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(client);
+    await client.hello();
+    client.send({
+      type: "source.upsert",
+      sourceId: "tab:7",
+      tabId: "7",
+      origin: "http://127.0.0.1:18081",
+      url: "http://127.0.0.1:18081/",
+      reason: "connect",
+    });
+    client.send({
+      type: "tools.replace",
+      sourceId: "tab:7",
+      tools: [{ originalName: "echo", inputSchema: { type: "object", properties: {} } }],
+    });
+    await waitFor(async () => (await adapter.listTools("tab:7")).length === 1);
+    client.close();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(await adapter.listSources()).toHaveLength(1);
+    await waitFor(async () => (await adapter.listSources()).length === 0);
+  });
+
+  it("cancels the grace period when the extension reconnects", async () => {
+    const adapter = new ExtensionAdapter({
+      adapterId: "ext-1",
+      allowedOrigins: [],
+      port: 0,
+      disconnectGraceMs: 250,
+      authToken: TEST_TOKEN,
+    });
+    adapters.push(adapter);
+    await adapter.start();
+    const first = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(first);
+    await first.hello();
+    first.send({
+      type: "source.upsert",
+      sourceId: "tab:8",
+      tabId: "8",
+      origin: "http://127.0.0.1:18081",
+      url: "http://127.0.0.1:18081/",
+      reason: "connect",
+    });
+    await waitFor(async () => (await adapter.listSources()).length === 1);
+    first.close();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const second = await FakeExtensionClient.connect(adapter.listenPort);
+    clients.push(second);
+    await second.hello();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(await adapter.listSources()).toHaveLength(1);
+  });
 });
 
-async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 2_000,
+): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (await predicate()) return;

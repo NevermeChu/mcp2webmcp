@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { BrowserContext, Page, Worker } from "playwright";
 import { chromium } from "playwright";
@@ -18,6 +19,7 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const extensionDir = path.join(repoRoot, "apps/extension");
+const TEST_TOKEN = "e2e-extension-token";
 
 async function listen(server: ReturnType<typeof createExtensionFixtureServer>, port: number) {
   await new Promise<void>((resolve, reject) => {
@@ -66,18 +68,24 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
       origins: [originA],
       extensionPort,
       auditPath: path.join(tmpDir, "audit.jsonl"),
+      authToken: TEST_TOKEN,
     });
     await listen(fixtureA, portA);
     await listen(fixtureDenied, portDenied);
     gateway = await connectGateway(repoRoot, configPath, path.join(tmpDir, "gw.stderr.log"));
     context = await launchWithExtension(path.join(tmpDir, "user-data"));
     const worker =
-      context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker", { timeout: 20_000 }));
-    await worker.evaluate((port) => {
-      (globalThis as unknown as { mcp2webmcpSetGatewayPort: (value: number) => void }).mcp2webmcpSetGatewayPort(
-        port,
-      );
-    }, extensionPort);
+      context.serviceWorkers()[0] ??
+      (await context.waitForEvent("serviceworker", { timeout: 20_000 }));
+    await worker.evaluate(
+      async ({ port, token }) => {
+        await chrome.storage.local.set({ gatewayAuthToken: token });
+        (
+          globalThis as unknown as { mcp2webmcpSetGatewayPort: (value: number) => void }
+        ).mcp2webmcpSetGatewayPort(port);
+      },
+      { port: extensionPort, token: TEST_TOKEN },
+    );
   }, 90_000);
 
   afterAll(async () => {
@@ -108,17 +116,18 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
     });
     expect(denied.isError).toBe(true);
     expect(textContent(denied)).toContain("POLICY_DENIED");
-    await gateway.client.callTool({
-      name: "webmcp_restore_consent",
-      arguments: { origin: originA, tool: "echo" },
-    });
-    await waitFor("echo re-projected", async () => {
-      const { tools } = await gateway.client.listTools({ cacheMode: "refresh" } as never);
-      return tools.some((tool) => tool.name === echo.mcpName) ? true : undefined;
-    });
+    execFileSync(process.execPath, [
+      path.join(repoRoot, "apps/gateway/dist/main.js"),
+      "--config",
+      configPath,
+      "--consent-restore-origin",
+      originA,
+      "--consent-tool",
+      "echo",
+    ]);
     const restored = await gateway.client.callTool({
-      name: echo.mcpName,
-      arguments: { message: "hello" },
+      name: "webmcp_call_tool",
+      arguments: { mcpName: echo.mcpName, arguments: { message: "hello" } },
     });
     expect(restored.isError).not.toBe(true);
 
@@ -138,8 +147,11 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
   it("shows runtimePresent with zero tools when the page never registerTool", async () => {
     const page = await openReadyPage(context, `${originA}/empty.html`);
     const probe = await page.evaluate(() => {
-      return (globalThis as { __runtimeProbe?: { runtimePresent: boolean; toolCount: number; polyfillBrand: boolean } })
-        .__runtimeProbe;
+      return (
+        globalThis as {
+          __runtimeProbe?: { runtimePresent: boolean; toolCount: number; polyfillBrand: boolean };
+        }
+      ).__runtimeProbe;
     });
     expect(probe?.runtimePresent).toBe(true);
     expect(probe?.toolCount).toBe(0);
@@ -147,7 +159,10 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
 
     const line = await waitFor("popup 0 tools", async () => {
       const text = await popupLineForOrigin(context, originA);
-      return text?.includes("0 tools") ? text : undefined;
+      if (text && !/0\s*(tools|个工具)/.test(text)) {
+        throw new Error(`row for ${originA} renders as ${JSON.stringify(text)}`);
+      }
+      return text && /0\s*(tools|个工具)/.test(text) ? text : undefined;
     });
     expect(line).not.toContain("no-webmcp-runtime");
     await page.close();
@@ -218,7 +233,8 @@ describe("extension adapter E2E (no MCP-B embed)", () => {
   it("keeps a page-owned host and still invokes echo", async () => {
     const page = await openReadyPage(context, `${originA}/existing-host.html`);
     const probe = await page.evaluate(() => {
-      return (globalThis as { __runtimeProbe?: { pageOwned: boolean; polyfillBrand: boolean } }).__runtimeProbe;
+      return (globalThis as { __runtimeProbe?: { pageOwned: boolean; polyfillBrand: boolean } })
+        .__runtimeProbe;
     });
     expect(probe?.pageOwned).toBe(true);
     expect(probe?.polyfillBrand).toBe(false);
@@ -257,12 +273,33 @@ function extensionId(context: BrowserContext): string {
   return new URL(worker.url()).host;
 }
 
-async function popupLineForOrigin(context: BrowserContext, origin: string): Promise<string | undefined> {
+async function popupLineForOrigin(
+  context: BrowserContext,
+  origin: string,
+): Promise<string | undefined> {
   const popup = await context.newPage();
   try {
     await popup.goto(`chrome-extension://${extensionId(context)}/popup.html`);
-    const items = await popup.locator("#tabs li").allTextContents();
-    return items.find((line) => line.includes(origin));
+    // The popup embeds the panel UI: the active-tab card plus the other-tabs list.
+    await popup
+      .waitForSelector("#active-tab-origin, .tab-item-origin", { timeout: 2000 })
+      .catch(() => undefined);
+    const candidates: string[] = [];
+    const activeOrigin = await popup
+      .locator("#active-tab-origin")
+      .textContent()
+      .catch(() => "");
+    const activeCount = await popup
+      .locator("#active-tools-count")
+      .textContent()
+      .catch(() => "");
+    if (activeOrigin) candidates.push(`${activeOrigin} ${activeCount ?? ""}`);
+    candidates.push(...(await popup.locator(".tab-item-origin").allTextContents()));
+    if (candidates.length > 0 && !candidates.some((line) => line.includes(origin))) {
+      // Surface what the popup actually rendered so failures are diagnosable.
+      throw new Error(`no row for ${origin}; popup=${JSON.stringify(candidates)}`);
+    }
+    return candidates.find((line) => line.includes(origin));
   } finally {
     await popup.close();
   }

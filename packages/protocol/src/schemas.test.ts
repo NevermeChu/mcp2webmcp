@@ -149,4 +149,15 @@ describe("protocol schemas", () => {
       }),
     ).toThrow(/\*/);
   });
+
+  it("rejects unknown configuration keys instead of silently ignoring them", () => {
+    expect(() =>
+      runtimeConfigSchema.parse({
+        runtime: { logLevell: "debug" },
+        browser: { allowedOrigins: [] },
+        policy: { default: "deny", rules: [] },
+        audit: { path: "/tmp/audit.jsonl" },
+      }),
+    ).toThrow(/unrecognized/i);
+  });
 });

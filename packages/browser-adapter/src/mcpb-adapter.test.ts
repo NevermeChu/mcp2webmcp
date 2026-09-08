@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { McpBAdapter } from "./mcpb-adapter.js";
 import { demoRelaySource, demoRelayTool, FakeRelayBridge } from "./fake-relay-bridge.js";
-import { assertExplicitOrigins, assertLoopbackHost, assertOriginPolicy, originIsAllowed } from "./mcpb-safety.js";
+import {
+  assertExplicitOrigins,
+  assertLoopbackHost,
+  assertOriginPolicy,
+  originIsAllowed,
+} from "./mcpb-safety.js";
 
 describe("mcpb safety", () => {
   it("rejects wildcard origins and non-loopback hosts", () => {
@@ -90,6 +95,16 @@ describe("McpBAdapter", () => {
     await waitFor(async () => (await adapter.listSources())[0]?.generation === 2);
   });
 
+  it("does not reuse a generation when a relay source reconnects", async () => {
+    const relay = new FakeRelayBridge();
+    relay.setSnapshot([demoRelaySource()], [demoRelayTool()]);
+    const adapter = await boot(relay);
+    relay.setSnapshot([], []);
+    await waitFor(async () => (await adapter.listSources()).length === 0);
+    relay.setSnapshot([demoRelaySource()], [demoRelayTool()]);
+    await waitFor(async () => (await adapter.listSources())[0]?.generation === 2);
+  });
+
   it("refuses to construct with wildcard origins", () => {
     expect(
       () =>
@@ -100,7 +115,10 @@ describe("McpBAdapter", () => {
   });
 });
 
-async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 2_000,
+): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (await predicate()) return;

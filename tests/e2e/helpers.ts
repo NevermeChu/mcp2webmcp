@@ -76,8 +76,7 @@ export async function waitForOriginal(
     return await waitFor(`${originalName} on ${origin ?? "any origin"}`, async () => {
       const rows = await listedRows(client);
       return rows.find(
-        (row) =>
-          row.originalName === originalName && (!origin || row.origin === origin),
+        (row) => row.originalName === originalName && (!origin || row.origin === origin),
       );
     });
   } catch (error) {
@@ -116,13 +115,18 @@ export async function launchBrowser(): Promise<Browser> {
   }
 }
 
-export function writeGatewayConfig(filePath: string, options: {
-  origins: string[];
-  relayPort: number;
-  persistPath: string;
-  auditPath: string;
-}): void {
-  const consentPath = options.auditPath.replace(/audit\.jsonl$/i, "consent.json").replaceAll("\\", "/");
+export function writeGatewayConfig(
+  filePath: string,
+  options: {
+    origins: string[];
+    relayPort: number;
+    persistPath: string;
+    auditPath: string;
+  },
+): void {
+  const consentPath = options.auditPath
+    .replace(/audit\.jsonl$/i, "consent.json")
+    .replaceAll("\\", "/");
   fs.writeFileSync(
     filePath,
     `
@@ -168,9 +172,12 @@ export function writeExtensionGatewayConfig(
     origins: string[];
     extensionPort: number;
     auditPath: string;
+    authToken: string;
   },
 ): void {
-  const consentPath = options.auditPath.replace(/audit\.jsonl$/i, "consent.json").replaceAll("\\", "/");
+  const consentPath = options.auditPath
+    .replace(/audit\.jsonl$/i, "consent.json")
+    .replaceAll("\\", "/");
   fs.writeFileSync(
     filePath,
     `
@@ -188,6 +195,7 @@ ${options.origins.map((origin) => `    - "${origin}"`).join("\n")}
   extension:
     host: "127.0.0.1"
     port: ${options.extensionPort}
+    authToken: "${options.authToken}"
 policy:
   default: deny
   rules:

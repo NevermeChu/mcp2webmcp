@@ -22,6 +22,32 @@ describe("LifecycleManager", () => {
     expect(rt.tools.list()).toHaveLength(1);
   });
 
+  it("retries attach when an event races with snapshot capture", async () => {
+    class RacingAdapter extends FakeBrowserAdapter {
+      private raced = false;
+
+      override async listTools(sourceId: string) {
+        const stale = await super.listTools(sourceId);
+        if (!this.raced) {
+          this.raced = true;
+          this.registerTool(sourceId, {
+            ...discoveredTool("echo"),
+            description: "new description",
+          });
+        }
+        return stale;
+      }
+    }
+
+    const rt = runtime();
+    const adapter = new RacingAdapter("fake-1");
+    adapter.connectSource(testSource({ adapterId: "fake-1" }));
+    adapter.registerTool("tab-18", { ...discoveredTool("echo"), description: "old description" });
+    await rt.attach(adapter);
+
+    expect(rt.tools.list()[0]?.description).toBe("new description");
+  });
+
   it("rejects stale generation and out-of-order revision", async () => {
     const rt = runtime();
     const adapter = new FakeBrowserAdapter("fake-1");
